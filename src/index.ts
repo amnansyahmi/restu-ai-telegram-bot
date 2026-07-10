@@ -12,6 +12,7 @@ if (!token) throw new Error("TELEGRAM_BOT_TOKEN is required. Copy .env.example t
 
 const app = express();
 const bot = createBot(token, publicUrl);
+const useWebhook = publicUrl.startsWith("https://");
 app.use(express.json());
 app.use(express.static("public"));
 
@@ -31,11 +32,16 @@ app.post("/api/tasks/:taskId/toggle", (req, res) => {
   res.json(task);
 });
 
-app.use("/telegram/webhook", webhookCallback(bot, "express"));
+// grammY allows either webhook mode or long polling, never both. Registering
+// webhookCallback marks the bot as webhook-driven, so only install it when an
+// HTTPS public URL is configured.
+if (useWebhook) {
+  app.use("/telegram/webhook", webhookCallback(bot, "express"));
+}
 
 app.listen(port, async () => {
   console.log(`Restu bot listening on port ${port}`);
-  if (publicUrl.startsWith("https://")) {
+  if (useWebhook) {
     await bot.api.setWebhook(`${publicUrl}/telegram/webhook`);
     console.log("Telegram webhook configured");
   } else {
