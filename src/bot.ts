@@ -24,6 +24,20 @@ export async function askAI(userId:number,question:string){
   if(!response.ok){const detail=await response.text().catch(()=>""); throw new Error(`Restu AI returned ${response.status}${detail?`: ${detail.slice(0,200)}`:""}`);} const data:any=await response.json(); return data.choices?.[0]?.message?.content??"I could not generate an answer.";
 }
 
+export async function checkAI(){
+  const endpoint=(process.env.AI_NONYMAUZ_CLOUD_URL||process.env.RESTU_AI_URL)?.trim();
+  if(!endpoint) return { configured:false, ok:false, error:"AI service URL not configured (AI_NONYMAUZ_CLOUD_URL)" };
+  const apiKey=process.env.AI_NONYMAUZ_CLOUD_API_KEY||process.env.RESTU_AI_API_KEY;
+  const model=(process.env.AI_NONYMAUZ_CLOUD_MODEL||process.env.RESTU_AI_MODEL)?.trim()||"restu-ai";
+  const url=endpoint.endsWith("/v1/chat/completions")?endpoint:`${endpoint.replace(/\/$/,"")}/v1/chat/completions`;
+  try{
+    const response=await fetch(url,{method:"POST",signal:AbortSignal.timeout(15000),headers:{"Content-Type":"application/json",...(apiKey?{"Authorization":`Bearer ${apiKey}`}:{})},body:JSON.stringify({model,messages:[{role:"user",content:"ping"}],max_tokens:5})});
+    if(!response.ok){const detail=await response.text().catch(()=>""); return { configured:true, ok:false, model, url, error:`HTTP ${response.status}${detail?`: ${detail.slice(0,200)}`:""}` }; }
+    const data:any=await response.json().catch(()=>null); const content=data?.choices?.[0]?.message?.content;
+    return content ? { configured:true, ok:true, model, url } : { configured:true, ok:false, model, url, error:`200 OK but empty content: ${JSON.stringify(data)?.slice(0,200)}` };
+  }catch(error:any){ return { configured:true, ok:false, model, url, error:error?.message??"request failed" }; }
+}
+
 export async function* askAIStream(userId:number,question:string):AsyncGenerator<string>{
   const endpoint=(process.env.AI_NONYMAUZ_CLOUD_URL||process.env.RESTU_AI_URL)?.trim(); if(!endpoint){ yield "Ask Restu AI is ready, but the AI service URL has not been configured yet."; return; }
   const apiKey=process.env.AI_NONYMAUZ_CLOUD_API_KEY||process.env.RESTU_AI_API_KEY;
