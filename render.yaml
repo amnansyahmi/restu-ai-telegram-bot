@@ -17,5 +17,13 @@ services:
         sync: false
       - key: AI_NONYMAUZ_CLOUD_MODEL
         sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: CRON_SECRET
+        sync: false
       - key: NODE_VERSION
         value: 22

@@ -65,6 +65,17 @@ async function seedTasks(weddingId: string) {
 
 export function storageMode() { return db ? "supabase" : "memory"; }
 
+export async function checkStorage(): Promise<{ mode: string; ok: boolean; error?: string }> {
+  if (!db) return { mode: "memory", ok: true };
+  try {
+    const { error } = await db.from("weddings").select("id", { head: true, count: "exact" });
+    if (error) return { mode: "supabase", ok: false, error: dbError(error).message };
+    return { mode: "supabase", ok: true };
+  } catch (error: any) {
+    return { mode: "supabase", ok: false, error: error?.message ?? "connection failed" };
+  }
+}
+
 export async function getProfile(telegramId: number, name?: string): Promise<Profile> {
   if (db) {
     let { data } = await db.from("weddings").select("*").eq("owner_telegram_id", telegramId).maybeSingle();
