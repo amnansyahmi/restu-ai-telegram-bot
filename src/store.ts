@@ -134,6 +134,25 @@ export async function cycleTask(telegramId:number, taskId:string): Promise<Task|
   return task;
 }
 
+export async function setTaskDone(telegramId:number, taskId:string, done:boolean): Promise<Task|undefined> {
+  const task = (await tasksFor(telegramId)).find(x => x.id === taskId); if (!task) return;
+  task.status = done ? "completed" : "not_started";
+  if (db) { const { error } = await db.from("tasks").update({status:task.status}).eq("id",taskId); if(error) throw dbError(error); }
+  return task;
+}
+
+export async function addTask(telegramId:number, title:string, category:string): Promise<Task> {
+  const clean = title.trim().slice(0,120) || "New task", cat = (category||"Planning").slice(0,40);
+  if (db) {
+    const profile = await getProfile(telegramId);
+    const { data, error } = await db.from("tasks").insert({ wedding_id:profile.weddingId, title:clean, category:cat }).select("*").single();
+    if (error) throw dbError(error);
+    return { id:data.id, title:data.title, category:data.category, status:data.status, dueDate:data.due_date ?? undefined };
+  }
+  const tasks = await tasksFor(telegramId), task:Task = { id:randomUUID(), title:clean, category:cat, status:"not_started" };
+  tasks.push(task); return task;
+}
+
 export async function progress(telegramId:number) { const tasks=await tasksFor(telegramId); const completed=tasks.filter(x=>x.status==="completed").length; return {completed,total:tasks.length,percent:tasks.length?Math.round(completed/tasks.length*100):0}; }
 
 export async function vendors(category?:string):Promise<Vendor[]> {

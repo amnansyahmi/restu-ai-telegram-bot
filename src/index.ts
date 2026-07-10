@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { webhookCallback } from "grammy";
 import { askAI, askAIStream, checkAI, createBot } from "./bot.js";
-import { checkStorage, cycleTask, dueReminders, getProfile, markReminderSent, progress, saveChat, storageMode, tasksFor, toggleCompareVendor, toggleSavedVendor, updateProfile, vendorState, vendors } from "./store.js";
+import { addTask, checkStorage, cycleTask, dueReminders, getProfile, markReminderSent, progress, saveChat, setTaskDone, storageMode, tasksFor, toggleCompareVendor, toggleSavedVendor, updateProfile, vendorState, vendors } from "./store.js";
 import { telegramUser } from "./telegram-auth.js";
 
 const token=process.env.TELEGRAM_BOT_TOKEN;
@@ -17,6 +17,8 @@ function api(handler:(req:any,res:any,userId:number)=>Promise<any>){return async
 app.get("/api/dashboard",api(async(_req,res,userId)=>{const [profile,tasks,value,vendorList]=await Promise.all([getProfile(userId),tasksFor(userId),progress(userId),vendorState(userId)]);res.json({profile,tasks,progress:value,vendors:vendorList});}));
 app.get("/api/tasks",api(async(_req,res,userId)=>res.json(await tasksFor(userId))));
 app.post("/api/tasks/:taskId/cycle",api(async(req,res,userId)=>{const task=await cycleTask(userId,req.params.taskId);if(!task)return res.status(404).json({error:"Task not found"});res.json(task);}));
+app.post("/api/tasks/:taskId/toggle",api(async(req,res,userId)=>{const task=await setTaskDone(userId,req.params.taskId,Boolean(req.body?.done));if(!task)return res.status(404).json({error:"Task not found"});res.json(task);}));
+app.post("/api/tasks",api(async(req,res,userId)=>{const title=String(req.body?.title??"").trim();if(!title)return res.status(400).json({error:"Title required"});res.json(await addTask(userId,title,String(req.body?.category??"Planning"))); }));
 app.patch("/api/profile",api(async(req,res,userId)=>{const allowed=["partnerName","weddingDate","location","budget","guestCount","eventType","remindersEnabled"];const patch=Object.fromEntries(Object.entries(req.body??{}).filter(([key])=>allowed.includes(key)));res.json(await updateProfile(userId,patch));}));
 app.get("/api/vendors",api(async(req,res)=>res.json(await vendors(typeof req.query.category==="string"?req.query.category:undefined))));
 app.post("/api/vendors/:vendorId/save",api(async(req,res,userId)=>res.json({saved:await toggleSavedVendor(userId,req.params.vendorId)})));
