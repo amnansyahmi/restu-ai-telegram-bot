@@ -1,36 +1,157 @@
-export type Task = {
-  id: string;
-  title: string;
-  category: string;
-  completed: boolean;
-};
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { randomUUID } from "node:crypto";
 
-const starterTasks: Omit<Task, "completed">[] = [
-  { id: "budget", title: "Set wedding budget", category: "Planning" },
-  { id: "date", title: "Confirm wedding date", category: "Planning" },
-  { id: "venue", title: "Shortlist wedding venues", category: "Venue" },
-  { id: "photo", title: "Book photographer", category: "Vendors" },
-  { id: "guest", title: "Prepare guest list", category: "Guests" }
+export type TaskStatus = "not_started" | "in_progress" | "completed" | "need_review";
+export type Task = { id: string; title: string; category: string; status: TaskStatus; dueDate?: string };
+export type Profile = {
+  weddingId: string;
+  telegramId: number;
+  name?: string;
+  role?: "bride" | "groom" | "family";
+  partnerName?: string;
+  weddingDate?: string;
+  location?: string;
+  budget: number;
+  guestCount: number;
+  eventType: string;
+  onboardingStep: string;
+  remindersEnabled: boolean;
+};
+export type Vendor = { id: string; name: string; category: string; location: string; priceFrom: number; completionScore: number; description?: string };
+
+const starterTasks = [
+  ["Tetapkan bajet perkahwinan", "Planning"], ["Sahkan tarikh perkahwinan", "Planning"],
+  ["Sediakan senarai tetamu", "Guests"], ["Daftar kursus kahwin", "Documentation"],
+  ["Tempah ujian HIV", "Documentation"], ["Senarai pendek tiga venue", "Venue"],
+  ["Bandingkan pakej katering", "Vendors"], ["Tempah jurugambar", "Vendors"]
+];
+const seedVendors: Vendor[] = [
+  { id:"v1", name:"Selera Kampung Catering", category:"Katering", location:"Shah Alam", priceFrom:28, completionScore:88 },
+  { id:"v2", name:"Dapur Mak Long", category:"Katering", location:"Klang", priceFrom:25, completionScore:76 },
+  { id:"v3", name:"Laman Seri Venue", category:"Venue", location:"Shah Alam", priceFrom:18000, completionScore:84 },
+  { id:"v4", name:"Cerita Kita Studio", category:"Fotografi", location:"Selangor", priceFrom:3500, completionScore:82 }
 ];
 
-// MVP-only storage. Replace with Restu.ai's database repository later.
-const users = new Map<number, Task[]>();
+const url = process.env.SUPABASE_URL?.trim();
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+const db: SupabaseClient | undefined = url && key ? createClient(url, key, { auth: { persistSession:false } }) : undefined;
+const profiles = new Map<number, Profile>();
+const memoryTasks = new Map<number, Task[]>();
+const messages = new Map<number, { role:"user"|"assistant"; content:string }[]>();
+const inviteOwners = new Map<string,number>();
+const collaboratorOwners = new Map<number,number>();
 
-export function tasksFor(userId: number): Task[] {
-  if (!users.has(userId)) {
-    users.set(userId, starterTasks.map((task) => ({ ...task, completed: false })));
-  }
-  return users.get(userId)!;
+function mapProfile(row: any): Profile {
+  return { weddingId:row.id, telegramId:Number(row.owner_telegram_id), name:row.owner_name ?? undefined,
+    role:row.role ?? undefined, partnerName:row.partner_name ?? undefined, weddingDate:row.wedding_date ?? undefined,
+    location:row.location ?? undefined, budget:Number(row.budget ?? 0), guestCount:row.guest_count ?? 0,
+    eventType:row.event_type ?? "Nikah + Resepsi", onboardingStep:row.onboarding_step ?? "role",
+    remindersEnabled:row.reminders_enabled ?? true };
 }
 
-export function toggleTask(userId: number, taskId: string): Task | undefined {
-  const task = tasksFor(userId).find((item) => item.id === taskId);
-  if (task) task.completed = !task.completed;
+async function seedTasks(weddingId: string) {
+  if (!db) return;
+  const { count } = await db.from("tasks").select("id", { count:"exact", head:true }).eq("wedding_id", weddingId);
+  if (!count) await db.from("tasks").insert(starterTasks.map(([title,category]) => ({ wedding_id:weddingId,title,category })));
+}
+
+export function storageMode() { return db ? "supabase" : "memory"; }
+
+export async function getProfile(telegramId: number, name?: string): Promise<Profile> {
+  if (db) {
+    let { data } = await db.from("weddings").select("*").eq("owner_telegram_id", telegramId).maybeSingle();
+    if (!data) {
+      const collaborator=await db.from("collaborators").select("wedding_id").eq("telegram_id",telegramId).not("accepted_at","is",null).maybeSingle();
+      if(collaborator.data) data=(await db.from("weddings").select("*").eq("id",collaborator.data.wedding_id).single()).data;
+    }
+    if (!data) {
+      const created = await db.from("weddings").insert({ owner_telegram_id:telegramId, owner_name:name }).select("*").single();
+      if (created.error) throw created.error;
+      data = created.data;
+      await seedTasks(data.id);
+    }
+    return mapProfile(data);
+  }
+  const ownerId=collaboratorOwners.get(telegramId); if(ownerId)return getProfile(ownerId,name);
+  if (!profiles.has(telegramId)) profiles.set(telegramId, { weddingId:randomUUID(),telegramId,name,budget:0,guestCount:0,eventType:"Nikah + Resepsi",onboardingStep:"role",remindersEnabled:true });
+  return profiles.get(telegramId)!;
+}
+
+export async function updateProfile(telegramId: number, patch: Partial<Profile>): Promise<Profile> {
+  const profile = await getProfile(telegramId);
+  const updated = { ...profile, ...patch };
+  if (db) {
+    const fields:any = {};
+    const mapping:any = { name:"owner_name",role:"role",partnerName:"partner_name",weddingDate:"wedding_date",location:"location",budget:"budget",guestCount:"guest_count",eventType:"event_type",onboardingStep:"onboarding_step",remindersEnabled:"reminders_enabled" };
+    for (const [key,value] of Object.entries(patch)) if (mapping[key]) fields[mapping[key]] = value;
+    fields.updated_at = new Date().toISOString();
+    const { data,error } = await db.from("weddings").update(fields).eq("id",profile.weddingId).select("*").single();
+    if (error) throw error;
+    return mapProfile(data);
+  }
+  profiles.set(telegramId,updated); return updated;
+}
+
+export async function tasksFor(telegramId: number): Promise<Task[]> {
+  const profile = await getProfile(telegramId);
+  if (db) {
+    await seedTasks(profile.weddingId);
+    const { data,error } = await db.from("tasks").select("*").eq("wedding_id",profile.weddingId).order("created_at");
+    if (error) throw error;
+    return data.map((x:any) => ({ id:x.id,title:x.title,category:x.category,status:x.status,dueDate:x.due_date ?? undefined }));
+  }
+  if (!memoryTasks.has(telegramId)) memoryTasks.set(telegramId,starterTasks.map(([title,category]) => ({ id:randomUUID(),title,category,status:"not_started" })));
+  return memoryTasks.get(telegramId)!;
+}
+
+export async function cycleTask(telegramId:number, taskId:string): Promise<Task|undefined> {
+  const task = (await tasksFor(telegramId)).find(x => x.id === taskId); if (!task) return;
+  const order:TaskStatus[] = ["not_started","in_progress","completed","need_review"];
+  task.status = order[(order.indexOf(task.status)+1)%order.length];
+  if (db) { const { error } = await db.from("tasks").update({status:task.status}).eq("id",taskId); if(error) throw error; }
   return task;
 }
 
-export function progress(userId: number) {
-  const tasks = tasksFor(userId);
-  const completed = tasks.filter((task) => task.completed).length;
-  return { completed, total: tasks.length, percent: Math.round((completed / tasks.length) * 100) };
+export async function progress(telegramId:number) { const tasks=await tasksFor(telegramId); const completed=tasks.filter(x=>x.status==="completed").length; return {completed,total:tasks.length,percent:tasks.length?Math.round(completed/tasks.length*100):0}; }
+
+export async function vendors(category?:string):Promise<Vendor[]> {
+  if (!db) return category ? seedVendors.filter(x=>x.category===category) : seedVendors;
+  let query=db.from("vendors").select("*").eq("active",true).order("completion_score",{ascending:false});
+  if(category) query=query.eq("category",category);
+  const {data,error}=await query; if(error) throw error;
+  return data.map((x:any)=>({id:x.id,name:x.name,category:x.category,location:x.location,priceFrom:Number(x.price_from),completionScore:x.completion_score,description:x.description}));
 }
+
+export async function saveChat(telegramId:number, role:"user"|"assistant", content:string) {
+  const profile=await getProfile(telegramId);
+  if(db) { const {error}=await db.from("chat_messages").insert({wedding_id:profile.weddingId,role,content}); if(error) throw error; return; }
+  const history=messages.get(telegramId)??[]; history.push({role,content}); messages.set(telegramId,history.slice(-20));
+}
+
+export async function chatHistory(telegramId:number) {
+  const profile=await getProfile(telegramId);
+  if(!db) return messages.get(telegramId)??[];
+  const {data,error}=await db.from("chat_messages").select("role,content").eq("wedding_id",profile.weddingId).order("created_at",{ascending:true}).limit(20);
+  if(error) throw error; return data as {role:"user"|"assistant";content:string}[];
+}
+
+export async function createInvite(telegramId:number) {
+  const profile=await getProfile(telegramId),code=randomUUID().replaceAll("-","").slice(0,12);
+  if(db){const {error}=await db.from("collaborators").insert({wedding_id:profile.weddingId,invite_code:code});if(error)throw error;}else inviteOwners.set(code,telegramId);
+  return code;
+}
+
+export async function acceptInvite(telegramId:number,code:string) {
+  if(db){const {data,error}=await db.from("collaborators").update({telegram_id:telegramId,accepted_at:new Date().toISOString()}).eq("invite_code",code).is("telegram_id",null).select("wedding_id").maybeSingle();if(error)throw error;return Boolean(data);}
+  const owner=inviteOwners.get(code);if(!owner)return false;collaboratorOwners.set(telegramId,owner);inviteOwners.delete(code);return true;
+}
+
+export async function dueReminders() {
+  if(!db)return [] as {telegramId:number;task:Task}[];
+  const today=new Date().toISOString().slice(0,10);
+  const {data,error}=await db.from("tasks").select("*,weddings!inner(owner_telegram_id,reminders_enabled)").lte("due_date",today).neq("status","completed").is("reminder_sent_at",null);
+  if(error)throw error;
+  return (data??[]).filter((x:any)=>x.weddings.reminders_enabled).map((x:any)=>({telegramId:Number(x.assigned_telegram_id??x.weddings.owner_telegram_id),task:{id:x.id,title:x.title,category:x.category,status:x.status,dueDate:x.due_date}}));
+}
+
+export async function markReminderSent(taskId:string){if(db){const {error}=await db.from("tasks").update({reminder_sent_at:new Date().toISOString()}).eq("id",taskId);if(error)throw error;}}
