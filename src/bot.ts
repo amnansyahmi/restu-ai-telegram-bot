@@ -4,6 +4,16 @@ import { acceptInvite, addTask, chatHistory, createInvite, cycleTask, getProfile
 const statusIcon:any = { not_started:"○",in_progress:"◐",completed:"●",need_review:"◎" };
 const CAPABILITIES = "• Checklist & progress tracking\n• Budget planner\n• Vendor discovery & comparison\n• Countdown to the big day\n• Ask Restu — instant answers, anytime";
 const ASK_SUGGESTIONS = ["What should I do next?","Berapa bajet katering untuk 500 pax?","Dokumen nikah yang saya perlukan?","Tips jimat bajet perkahwinan"];
+const QUIZ:{question:string;options:string[];correct:number;explanation:string}[] = [
+  {question:"In a Malay wedding, what is 'bunga telur'?",options:["Decorated eggs given to guests","A flower bouquet","The wedding cake","A blessing prayer"],correct:0,explanation:"Bunga telur are decorated eggs symbolising fertility, given to guests as gifts."},
+  {question:"What does 'bersanding' refer to?",options:["The couple on the pelamin (dais)","The nikah ceremony","Exchanging rings","The honeymoon"],correct:0,explanation:"Bersanding is the enthronement where the couple sits together on the pelamin."},
+  {question:"Which is usually the BIGGEST cost of a Malaysian wedding?",options:["Food & catering (~35–40%)","Photography","Attire","Invitations"],correct:0,explanation:"Catering is typically the single largest expense, around 35–40% of the budget."},
+  {question:"How early should you book a popular wedding venue?",options:["6–12 months ahead","1 week ahead","On the day","1 month ahead"],correct:0,explanation:"Popular venues get booked 6–12 months in advance — reserve early!"},
+  {question:"What is 'hantaran'?",options:["Gift trays exchanged between families","The invitation card","The wedding car","A wedding song"],correct:0,explanation:"Hantaran are decorated gift trays exchanged between the two families."},
+  {question:"What course is required before a Muslim marriage in Malaysia?",options:["Kursus Pra-Perkahwinan","A driving course","A cooking course","A first-aid course"],correct:0,explanation:"The Kursus Pra-Perkahwinan (pre-marriage course) is required before nikah."},
+  {question:"How much of your budget should you keep as an emergency buffer?",options:["About 10%","0%","About 50%","About 90%"],correct:0,explanation:"Set aside roughly 10% for last-minute surprises."},
+  {question:"What is 'merisik'?",options:["The enquiry/proposal visit","The reception","The nikah","The honeymoon"],correct:0,explanation:"Merisik is the first visit by the man's family to enquire about the woman."}
+];
 const errText = (e:any) => typeof e==="string" ? e : (e?.message || JSON.stringify(e).slice(0,200));
 // Parse an OpenAI-compatible completion body that may be JSON or a Server-Sent-Events stream.
 function parseCompletion(raw:string):{content?:string;error?:string}{
@@ -18,12 +28,13 @@ function mainKeyboard(publicUrl:string) { return new InlineKeyboard()
   .webApp("Open Restu.ai Dashboard",`${publicUrl}/app`).row()
   .text("Ask Restu","ask").text("Today’s Plan","checklist").row()
   .text("Countdown","countdown").text("Budget","budget").row()
-  .text("Invite Partner","invite"); }
+  .text("Wedding Quiz","quiz").text("Invite Partner","invite"); }
 function categoryKeyboard(){ return new InlineKeyboard().text("Venue","vendor:Venue").text("Catering","vendor:Katering").row().text("Photography","vendor:Fotografi").text("← Menu","menu"); }
 
 async function checklistKeyboard(userId:number) { const keyboard=new InlineKeyboard(); for(const task of await tasksFor(userId)) keyboard.text(`${statusIcon[task.status]} ${task.title}`,`task:${task.id}`).row(); return keyboard.text("← Main menu","menu"); }
 async function checklistText(userId:number) { const value=await progress(userId),filled=Math.round(value.percent/10); return `Wedding checklist\n\n${"▰".repeat(filled)}${"▱".repeat(10-filled)} ${value.percent}%\n${value.completed} of ${value.total} completed\n\nTap a task to change its status:\n○ Not started → ◐ In progress → ● Completed → ◎ Review`; }
 function daysUntil(value?:string){ if(!value)return undefined; return Math.ceil((new Date(`${value}T00:00:00`).getTime()-Date.now())/86400000); }
+async function sendQuiz(ctx:any){ const q=QUIZ[Math.floor(Math.random()*QUIZ.length)]; await ctx.replyWithPoll(q.question,q.options.map((text:string)=>({text})),{is_anonymous:false,type:"quiz",correct_option_id:q.correct,explanation:q.explanation}); }
 
 export async function askAI(userId:number,question:string){
   // Reuse the SSE-aware streaming path so both bot chat and Mini App handle the
@@ -76,6 +87,7 @@ export function createBot(token:string,publicUrl:string){
   bot.command("checklist",async ctx=>{if(!ctx.from)return;await ctx.reply(await checklistText(ctx.from.id),{reply_markup:await checklistKeyboard(ctx.from.id)});});
   bot.command("help",async ctx=>ctx.reply(`What Restu can do for you:\n\n${CAPABILITIES}\n\nTap the Dashboard button next to the message box to open Restu.ai anytime, or just send me any wedding question.`,{reply_markup:mainKeyboard(publicUrl)}));
   bot.command("invite",async ctx=>{if(!ctx.from)return;const code=await createInvite(ctx.from.id);const me=await ctx.api.getMe();await ctx.reply(`Invite your partner or family with this one-time link:\n\nhttps://t.me/${me.username}?start=invite_${code}\n\nAnyone with this link can join your wedding plan, so share it privately.`);});
+  bot.command("quiz",async ctx=>{if(!ctx.from)return;await sendQuiz(ctx);});
   bot.command("addtask",async ctx=>{if(!ctx.from)return;const title=ctx.match?.trim();if(!title){await ctx.reply("Add a task like this:\n\n/addtask Tempah baju pengantin");return;}const task=await addTask(ctx.from.id,title,"Planning");await ctx.reply(`Added to your checklist:\n● ${task.title}`,{reply_markup:new InlineKeyboard().text("Open checklist","checklist").webApp("Open Restu.ai",`${publicUrl}/app#plan`)});});
   bot.callbackQuery("menu",async ctx=>{await ctx.answerCallbackQuery();await ctx.editMessageText("What would you like to do?",{reply_markup:mainKeyboard(publicUrl)});});
   bot.callbackQuery("checklist",async ctx=>{await ctx.answerCallbackQuery();await ctx.editMessageText(await checklistText(ctx.from.id),{reply_markup:await checklistKeyboard(ctx.from.id)});});
@@ -86,6 +98,7 @@ export function createBot(token:string,publicUrl:string){
   bot.callbackQuery("budget",async ctx=>{await ctx.answerCallbackQuery();const p=await getProfile(ctx.from.id);const perGuest=p.guestCount?Math.round(p.budget/p.guestCount):0;await ctx.reply(`Your wedding budget\n\nTotal: RM${p.budget.toLocaleString("en-MY")}\nGuests: ${p.guestCount.toLocaleString("en-MY")}\nAverage: RM${perGuest.toLocaleString("en-MY")} per guest\nEmergency buffer: RM${Math.round(p.budget*.1).toLocaleString("en-MY")}`,{reply_markup:new InlineKeyboard().webApp("Open Budget Planner",`${publicUrl}/app#budget`)});});
   bot.callbackQuery("invite",async ctx=>{await ctx.answerCallbackQuery();const code=await createInvite(ctx.from.id),me=await ctx.api.getMe();await ctx.reply(`Plan together\n\nShare this one-time link privately with your partner or family:\nhttps://t.me/${me.username}?start=invite_${code}`);});
   bot.callbackQuery("vendors",async ctx=>{await ctx.answerCallbackQuery();await ctx.reply("Choose a vendor category:",{reply_markup:categoryKeyboard()});});
+  bot.callbackQuery("quiz",async ctx=>{await ctx.answerCallbackQuery();await sendQuiz(ctx);await ctx.reply("Tap Wedding Quiz again for another question.",{reply_markup:new InlineKeyboard().text("Another question","quiz").text("← Menu","menu")});});
   bot.callbackQuery(/^vendor:(.+)$/,async ctx=>{await ctx.answerCallbackQuery();const list=await vendors(ctx.match[1]);const body=list.length?list.map(v=>`${v.completionScore} · ${v.name}\nFrom RM${v.priceFrom} · ${v.location}`).join("\n\n"):"No vendors found yet.";await ctx.reply(body,{reply_markup:new InlineKeyboard().webApp("Compare in Restu.ai",`${publicUrl}/app#vendors`)});});
   bot.on("message:text",async ctx=>{const question=ctx.message.text;if(question.startsWith("/"))return;await ctx.replyWithChatAction("typing");try{await saveChat(ctx.from.id,"user",question);const answer=await askAI(ctx.from.id,question);await saveChat(ctx.from.id,"assistant",answer);await ctx.reply(answer,{reply_markup:new InlineKeyboard().text("Open checklist","checklist").webApp("Open Restu.ai",`${publicUrl}/app`)});}catch(error){console.error("AI error",error);await ctx.reply("Restu AI is temporarily unavailable. Your question has been saved—please try again shortly.");}});
   bot.catch(async err=>{const e=err.error as any;console.error("Telegram bot error:",e?.stack||e?.message||JSON.stringify(e));try{await err.ctx?.reply("Something went wrong on our side. Please try again in a moment.");}catch(replyError){console.error("Failed to send error reply:",replyError);}}); return bot;
