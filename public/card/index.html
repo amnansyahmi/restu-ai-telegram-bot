@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f5140"><title>Wedding Invitation · Restu.ai</title>
+<style>
+@font-face{font-family:'Plus Jakarta Sans';font-weight:400 800;font-style:normal;font-display:swap;src:url(/app/fonts/pjs.woff2) format('woff2')}
+@font-face{font-family:'Fraunces';font-weight:400 600;font-style:normal;font-display:swap;src:url(/app/fonts/fraunces.woff2) format('woff2')}
+:root{--em:#0f5140;--em2:#26705d;--gold:#c39a46;--cream:#f7f3e9;--paper:#fffefa;--ink:#18362e;--muted:#76817d;--line:#e4e7e1}
+*{box-sizing:border-box;margin:0}body{background:var(--cream);color:var(--ink);font:15px/1.55 "Plus Jakarta Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:520px;margin:auto;min-height:100dvh;padding:20px 16px 40px}
+.card{background:var(--paper);border-radius:26px;overflow:hidden;box-shadow:0 20px 50px rgba(15,81,64,.12);border:1px solid #ece7d8}
+.top{background:linear-gradient(150deg,var(--em),var(--em2));color:#fff;text-align:center;padding:40px 24px 44px;position:relative;overflow:hidden}
+.top:before,.top:after{content:"";position:absolute;border:1px solid #ffffff22;border-radius:50%}.top:before{width:220px;height:220px;top:-120px;right:-70px}.top:after{width:120px;height:120px;bottom:-60px;left:-30px}
+.eyebrow{position:relative;font-size:11px;letter-spacing:.22em;color:#f2d99e;font-weight:700;text-transform:uppercase}
+.arabic{position:relative;font-size:20px;color:#f2d99e;margin-bottom:12px}
+h1{position:relative;font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:34px;line-height:1.15;margin:6px 0 10px;letter-spacing:-.01em}
+.hosts{position:relative;color:#dcebe6;font-size:13px;max-width:340px;margin:0 auto}
+.body{padding:26px 24px 30px;text-align:center}
+.divider{color:var(--gold);letter-spacing:.4em;margin:4px 0 20px;font-size:12px}
+.detail{margin:9px 0}.detail .lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.detail .val{font-family:"Fraunces",Georgia,serif;font-size:19px;color:var(--ink)}
+.detail .sub{font-size:13px;color:var(--muted)}
+.maplink{display:inline-block;margin-top:6px;color:var(--em);font-weight:700;font-size:13px;text-decoration:none;border-bottom:1px solid #bcd3cb}
+.count{display:flex;justify-content:center;gap:20px;margin:24px 0 4px}
+.count b{display:block;font-family:"Fraunces",Georgia,serif;font-size:26px;color:var(--em)}.count span{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.msg{margin:22px auto 0;max-width:360px;font-style:italic;color:#3f5a51;font-size:14px}
+.rsvp{margin:26px 16px 20px;background:#f3f6f3;border:1px solid #dfe7e2;border-radius:20px;padding:20px}
+.rsvp h3{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:20px;margin-bottom:4px}.rsvp p{color:var(--muted);font-size:12px;margin-bottom:14px}
+.field{margin:9px 0;text-align:left}.field label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px}
+.field input{width:100%;border:1px solid #cfd8d3;border-radius:12px;padding:12px;font:inherit;background:#fff}
+.choice{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.choice button{border:1px solid #cbd6d0;background:#fff;color:var(--ink);border-radius:14px;padding:14px;font:inherit;font-weight:700;cursor:pointer;transition:.15s}
+.choice button.yes{border-color:var(--em)}.choice button.no{border-color:#e0c3bd}
+.choice button:active{transform:scale(.97)}
+.thanks{text-align:center;padding:10px}.thanks .tick{width:54px;height:54px;border-radius:50%;background:var(--em);color:#fff;display:grid;place-items:center;margin:0 auto 12px;font-size:26px}
+.foot{text-align:center;color:var(--muted);font-size:11px;margin-top:22px}.foot a{color:var(--em);text-decoration:none;font-weight:700}
+.loading,.err{text-align:center;padding:70px 20px;color:var(--muted)}
+</style></head>
+<body><div class="wrap" id="wrap">
+<div class="loading" id="loading">Loading invitation…</div>
+</div>
+<script>
+const id=location.pathname.split('/').filter(Boolean).pop();
+const esc=s=>String(s??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
+function fmtDate(d){if(!d)return '';const t=new Date(d+'T00:00:00');if(isNaN(t))return d;return t.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}
+function daysTo(d){if(!d)return null;const t=new Date(d+'T00:00:00');if(isNaN(t))return null;return Math.max(0,Math.ceil((t-Date.now())/864e5))}
+async function load(){
+  try{
+    const r=await fetch('/api/card/'+id);if(!r.ok)throw 0;const c=await r.json();
+    const couple=(c.name&&c.partnerName)?`${esc(c.name)} & ${esc(c.partnerName)}`:esc(c.name||c.partnerName||'Our Wedding');
+    const days=daysTo(c.weddingDate);
+    const venue=c.venue||c.location;
+    document.title=`${(c.name||'')}${c.partnerName?' & '+c.partnerName:''} — Wedding Invitation`;
+    document.querySelector('#wrap').innerHTML=`
+      <div class="card">
+        <div class="top">
+          <div class="arabic">بِسْمِ ٱللَّٰهِ</div>
+          <div class="eyebrow">Walimatulurus · ${esc(c.eventType||'Majlis Perkahwinan')}</div>
+          <h1>${couple}</h1>
+          ${c.hosts?`<p class="hosts">${esc(c.hosts)}</p>`:''}
+        </div>
+        <div class="body">
+          <div class="divider">◆ ◆ ◆</div>
+          ${c.weddingDate?`<div class="detail"><div class="lbl">Date</div><div class="val">${esc(fmtDate(c.weddingDate))}</div></div>`:''}
+          ${c.ceremonyTime?`<div class="detail"><div class="lbl">Time</div><div class="val">${esc(c.ceremonyTime)}</div></div>`:''}
+          ${venue?`<div class="detail"><div class="lbl">Venue</div><div class="val">${esc(venue)}</div>${c.venue&&c.location&&c.venue!==c.location?`<div class="sub">${esc(c.location)}</div>`:''}<a class="maplink" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((c.venue?c.venue+' ':'')+(c.location||''))}">View on map</a></div>`:''}
+          ${days!==null?`<div class="count"><div><b>${days}</b><span>Days</span></div><div><b>${Math.floor(days/7)}</b><span>Weeks</span></div><div><b>${Math.floor(days/30)}</b><span>Months</span></div></div>`:''}
+          ${c.cardMessage?`<p class="msg">“${esc(c.cardMessage)}”</p>`:''}
+        </div>
+        <div class="rsvp" id="rsvp">
+          <h3>RSVP</h3><p>Kindly let us know if you can join us.</p>
+          <div class="field"><label>Your name</label><input id="rname" maxlength="80" placeholder="Nama penuh" autocomplete="name"></div>
+          <div class="field"><label>Number of guests (pax)</label><input id="rpax" type="number" inputmode="numeric" min="1" max="20" value="1"></div>
+          <div class="choice"><button class="yes" data-r="yes">Hadir 🤍</button><button class="no" data-r="no">Tak hadir</button></div>
+        </div>
+        <div class="foot">Made with <a href="https://t.me" target="_blank">Restu.ai</a> — your wedding planner</div>
+      </div>`;
+    document.querySelectorAll('.choice button').forEach(b=>b.onclick=()=>rsvp(b.dataset.r));
+  }catch(e){document.querySelector('#wrap').innerHTML='<div class="err"><b>Invitation not found</b><br>This link may be incorrect or the invitation is not ready yet.</div>'}
+}
+async function rsvp(choice){
+  const name=document.querySelector('#rname').value.trim();
+  if(!name){document.querySelector('#rname').focus();return}
+  const pax=Math.max(1,Math.min(20,Number(document.querySelector('#rpax').value)||1));
+  try{
+    const r=await fetch('/api/card/'+id+'/rsvp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,pax,rsvp:choice})});
+    if(!r.ok)throw 0;
+    document.querySelector('#rsvp').innerHTML=`<div class="thanks"><div class="tick">✓</div><h3>Terima kasih, ${esc(name)}!</h3><p>${choice==='yes'?`We can't wait to celebrate with you.`:`Thank you for letting us know.`}</p></div>`;
+  }catch(e){alert('Could not submit RSVP. Please try again.')}
+}
+load();
+</script></body></html>

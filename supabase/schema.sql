@@ -90,6 +90,10 @@ alter table weddings add column if not exists reminders_enabled boolean default 
 alter table tasks add column if not exists assigned_telegram_id bigint;
 alter table tasks add column if not exists reminder_sent_at timestamptz;
 alter table saved_vendors add column if not exists compare_selected boolean default false;
+alter table weddings add column if not exists card_venue text;
+alter table weddings add column if not exists card_time text;
+alter table weddings add column if not exists card_hosts text;
+alter table weddings add column if not exists card_message text;
 
 create index if not exists tasks_wedding_idx on tasks(wedding_id);
 create index if not exists chat_wedding_idx on chat_messages(wedding_id, created_at);
