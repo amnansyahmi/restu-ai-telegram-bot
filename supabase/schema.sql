@@ -94,6 +94,7 @@ alter table weddings add column if not exists card_venue text;
 alter table weddings add column if not exists card_time text;
 alter table weddings add column if not exists card_hosts text;
 alter table weddings add column if not exists card_message text;
+alter table weddings add column if not exists card_theme text default 'emerald';
 
 create index if not exists tasks_wedding_idx on tasks(wedding_id);
 create index if not exists chat_wedding_idx on chat_messages(wedding_id, created_at);
