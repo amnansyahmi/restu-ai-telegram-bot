@@ -209,6 +209,16 @@ export async function removeGuest(telegramId:number, guestId:string):Promise<voi
   const {error}=await db.from("guests").delete().eq("wedding_id",profile.weddingId).eq("id",guestId); if(error) throw dbError(error);
 }
 
+const coupleGame = new Map<string, Map<number, string>>();
+export async function submitCoupleAnswers(telegramId:number, seq:string):Promise<{ready:boolean;match:number;total:number}> {
+  const profile=await getProfile(telegramId), wid=profile.weddingId;
+  let m=coupleGame.get(wid); if(!m){ m=new Map(); coupleGame.set(wid,m); }
+  m.set(telegramId,seq);
+  let partnerSeq:string|undefined; for(const [tid,s] of m){ if(tid!==telegramId){ partnerSeq=s; break; } }
+  if(partnerSeq){ let match=0; for(let i=0;i<seq.length;i++) if(seq[i]===partnerSeq[i]) match++; return {ready:true,match,total:seq.length}; }
+  return {ready:false,match:0,total:seq.length};
+}
+
 export async function profileByWeddingId(weddingId:string):Promise<Profile|undefined> {
   if(!db) return [...profiles.values()].find(p=>p.weddingId===weddingId);
   const {data,error}=await db.from("weddings").select("*").eq("id",weddingId).maybeSingle();

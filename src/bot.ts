@@ -1,5 +1,5 @@
 import { Bot, InlineKeyboard } from "grammy";
-import { acceptInvite, addTask, chatHistory, createInvite, cycleTask, getProfile, progress, saveChat, tasksFor, vendors } from "./store.js";
+import { acceptInvite, addTask, chatHistory, createInvite, cycleTask, getProfile, progress, saveChat, submitCoupleAnswers, tasksFor, vendors } from "./store.js";
 
 const statusIcon:any = { not_started:"○",in_progress:"◐",completed:"●",need_review:"◎" };
 const CAPABILITIES = "• Checklist & progress tracking\n• Budget planner\n• Vendor discovery & comparison\n• Countdown to the big day\n• Ask Restu — instant answers, anytime";
@@ -27,6 +27,17 @@ const STYLE_RESULT:Record<string,[string,string]> = {
   "Grand Modern":["The Modern Statement","A large, stylish affair — sleek décor, great music and a wow-factor venue."],
   "Intimate Modern":["The Chic Minimalist","A small, elegant celebration — minimalist, personal and effortlessly cool."]
 };
+const COUPLE_Q:{q:string;a:string;b:string}[] = [
+  {q:"Ideal honeymoon?",a:"Beach getaway",b:"City adventure"},
+  {q:"Wedding song vibe?",a:"Romantic ballad",b:"Upbeat & fun"},
+  {q:"Your guest list?",a:"Big celebration",b:"Intimate gathering"},
+  {q:"Spend more on…",a:"The food",b:"The photos"},
+  {q:"Colour mood?",a:"Warm & gold",b:"Soft & pastel"}
+];
+function coupleQuestion(seq:string){
+  const idx=seq.length, q=COUPLE_Q[idx];
+  return {text:`Know Your Partner · ${idx+1}/${COUPLE_Q.length}\n\n${q.q}`,keyboard:new InlineKeyboard().text(q.a,`couple:${seq}A`).row().text(q.b,`couple:${seq}B`)};
+}
 function styleStep(seq:string,publicUrl:string){
   const idx=seq.length;
   if(idx>=STYLE_Q.length){
@@ -53,7 +64,7 @@ function mainKeyboard(publicUrl:string) { return new InlineKeyboard()
   .text("Ask Restu","ask").text("Today’s Plan","checklist").row()
   .text("Countdown","countdown").text("Budget","budget").row()
   .text("Wedding Quiz","quiz").text("Style Quiz","style:").row()
-  .text("Invite Partner","invite"); }
+  .text("Couple Game","couple:").text("Invite Partner","invite"); }
 function categoryKeyboard(){ return new InlineKeyboard().text("Venue","vendor:Venue").text("Catering","vendor:Katering").row().text("Photography","vendor:Fotografi").text("← Menu","menu"); }
 
 async function checklistKeyboard(userId:number) { const keyboard=new InlineKeyboard(); for(const task of await tasksFor(userId)) keyboard.text(`${statusIcon[task.status]} ${task.title}`,`task:${task.id}`).row(); return keyboard.text("← Main menu","menu"); }
@@ -115,6 +126,8 @@ export function createBot(token:string,publicUrl:string){
   bot.command("quiz",async ctx=>{if(!ctx.from)return;await sendQuiz(ctx);});
   bot.command("style",async ctx=>{if(!ctx.from)return;const s=styleStep("",publicUrl);await ctx.reply(s.text,{reply_markup:s.keyboard});});
   bot.callbackQuery(/^style:([GITM]*)$/,async ctx=>{await ctx.answerCallbackQuery();const s=styleStep(ctx.match[1],publicUrl);await ctx.editMessageText(s.text,{reply_markup:s.keyboard});});
+  bot.command("couplegame",async ctx=>{if(!ctx.from)return;const s=coupleQuestion("");await ctx.reply(s.text,{reply_markup:s.keyboard});});
+  bot.callbackQuery(/^couple:([AB]*)$/,async ctx=>{const seq=ctx.match[1];await ctx.answerCallbackQuery();if(seq.length<COUPLE_Q.length){const s=coupleQuestion(seq);await ctx.editMessageText(s.text,{reply_markup:s.keyboard});return;}const r=await submitCoupleAnswers(ctx.from.id,seq);if(r.ready){const pct=Math.round(r.match/r.total*100);await ctx.editMessageText(`You matched on ${r.match} of ${r.total}! (${pct}%)\n\n${pct>=80?"You two are perfectly in sync.":pct>=40?"Great alignment — a few things to chat about!":"Opposites attract — time for a fun discussion!"}`,{reply_markup:new InlineKeyboard().text("Play again","couple:").row().webApp("Plan together",`${publicUrl}/app`)});}else{await ctx.editMessageText("Your answers are saved.\n\nNow ask your partner to play — send them /couplegame, or use Invite Partner to link your plans. We'll reveal your match once you both finish.",{reply_markup:new InlineKeyboard().text("Invite Partner","invite")});}});
   bot.command("addtask",async ctx=>{if(!ctx.from)return;const title=ctx.match?.trim();if(!title){await ctx.reply("Add a task like this:\n\n/addtask Tempah baju pengantin");return;}const task=await addTask(ctx.from.id,title,"Planning");await ctx.reply(`Added to your checklist:\n● ${task.title}`,{reply_markup:new InlineKeyboard().text("Open checklist","checklist").webApp("Open Restu.ai",`${publicUrl}/app#plan`)});});
   bot.callbackQuery("menu",async ctx=>{await ctx.answerCallbackQuery();await ctx.editMessageText("What would you like to do?",{reply_markup:mainKeyboard(publicUrl)});});
   bot.callbackQuery("checklist",async ctx=>{await ctx.answerCallbackQuery();await ctx.editMessageText(await checklistText(ctx.from.id),{reply_markup:await checklistKeyboard(ctx.from.id)});});
