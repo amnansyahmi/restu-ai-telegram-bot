@@ -34,8 +34,8 @@ export async function* askAIStream(userId:number,question:string):AsyncGenerator
   const response=await fetch(url,{method:"POST",signal:AbortSignal.timeout(60000),headers:{"Content-Type":"application/json",...(apiKey?{"Authorization":`Bearer ${apiKey}`}:{})},body:JSON.stringify({model,stream:true,messages:[{role:"system",content:`You are Restu, a concise Malaysian wedding planning assistant. ${context}`},...history.slice(-8),{role:"user",content:question}],temperature:.4})});
   if(!response.ok){const detail=await response.text().catch(()=>""); throw new Error(`Restu AI returned ${response.status}${detail?`: ${detail.slice(0,200)}`:""}`);}
   // Fall back to a single JSON payload if the service ignored stream:true.
-  if(!response.headers.get("content-type")?.includes("text/event-stream")){const data:any=await response.json().catch(()=>null); yield data?.choices?.[0]?.message?.content??"I could not generate an answer."; return;}
-  const reader=response.body?.getReader(); if(!reader){ yield "I could not generate an answer."; return; }
+  if(!response.headers.get("content-type")?.includes("text/event-stream")){const data:any=await response.json().catch(()=>null); const content=data?.choices?.[0]?.message?.content; if(content){yield content;}else{console.error("Restu AI returned no content (non-stream):",JSON.stringify(data)?.slice(0,400));} return;}
+  const reader=response.body?.getReader(); if(!reader){ console.error("Restu AI stream returned no body"); return; }
   const decoder=new TextDecoder(); let buffer="";
   while(true){ const {done,value}=await reader.read(); if(done)break; buffer+=decoder.decode(value,{stream:true});
     let nl:number; while((nl=buffer.indexOf("\n"))>=0){ const line=buffer.slice(0,nl).trim(); buffer=buffer.slice(nl+1);
