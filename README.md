@@ -6,6 +6,9 @@ An interactive Telegram bot and Telegram Mini App for Restu.ai. It includes:
 - Inline checklist buttons inside Telegram chat
 - Persistent onboarding, profile, countdown and four-state task tracking
 - Full Mini App: Home, Plan, Ask Restu AI, Vendors, Budget and Profile
+- Sleek monochrome UI: line-icon status glyphs, skeleton loaders, animated readiness ring and count-up stats
+- Streaming Ask Restu AI replies (token-by-token) via a server-sent-events endpoint
+- Touch gestures: swipe vendor cards to save/compare, tap for a bottom-sheet detail view, pull-to-refresh
 - Supabase/PostgreSQL schema with a memory fallback for demos
 - Telegram Mini App signature validation and webhook secret validation
 - AI chat history and OpenAI-compatible `ai-nonymauz-cloud` integration
@@ -73,7 +76,7 @@ AI_NONYMAUZ_CLOUD_API_KEY=optional-secret
 AI_NONYMAUZ_CLOUD_MODEL=restu-ai
 ```
 
-The service calls the OpenAI-compatible `/v1/chat/completions` endpoint and injects the user's wedding profile into the system context. `AI_NONYMAUZ_CLOUD_MODEL` is optional and defaults to `restu-ai`; set it to whatever model id your `ai-nonymauz-cloud` endpoint serves. Requests time out after 30 seconds so a slow endpoint never blocks the bot.
+The service calls the OpenAI-compatible `/v1/chat/completions` endpoint and injects the user's wedding profile into the system context. `AI_NONYMAUZ_CLOUD_MODEL` is optional and defaults to `restu-ai`; set it to whatever model id your `ai-nonymauz-cloud` endpoint serves. The Mini App streams replies through `/api/chat/stream` (server-sent events) when the endpoint supports `stream:true`, and falls back to a single response otherwise. Bot-chat requests time out after 30 seconds and streamed requests after 60 seconds, so a slow endpoint never blocks the app.
 
 `RESTU_AI_URL`, `RESTU_AI_API_KEY` and `RESTU_AI_MODEL` remain supported as aliases.
 
