@@ -67,6 +67,7 @@ create table if not exists saved_vendors (
   created_at timestamptz default now(),
   primary key(wedding_id, vendor_id)
 );
+alter table saved_vendors add column if not exists compare_selected boolean default false;
 
 create table if not exists chat_messages (
   id uuid primary key default gen_random_uuid(),
