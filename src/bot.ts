@@ -1,8 +1,9 @@
 import { Bot, InlineKeyboard } from "grammy";
-import { acceptInvite, chatHistory, createInvite, cycleTask, getProfile, progress, saveChat, tasksFor, vendors } from "./store.js";
+import { acceptInvite, addTask, chatHistory, createInvite, cycleTask, getProfile, progress, saveChat, tasksFor, vendors } from "./store.js";
 
 const statusIcon:any = { not_started:"○",in_progress:"◐",completed:"●",need_review:"◎" };
 const CAPABILITIES = "• Checklist & progress tracking\n• Budget planner\n• Vendor discovery & comparison\n• Countdown to the big day\n• Ask Restu — instant answers, anytime";
+const ASK_SUGGESTIONS = ["What should I do next?","Berapa bajet katering untuk 500 pax?","Dokumen nikah yang saya perlukan?","Tips jimat bajet perkahwinan"];
 const errText = (e:any) => typeof e==="string" ? e : (e?.message || JSON.stringify(e).slice(0,200));
 // Parse an OpenAI-compatible completion body that may be JSON or a Server-Sent-Events stream.
 function parseCompletion(raw:string):{content?:string;error?:string}{
@@ -16,6 +17,7 @@ function parseCompletion(raw:string):{content?:string;error?:string}{
 function mainKeyboard(publicUrl:string) { return new InlineKeyboard()
   .webApp("Open Restu.ai Dashboard",`${publicUrl}/app`).row()
   .text("Ask Restu","ask").text("Today’s Plan","checklist").row()
+  .text("Countdown","countdown").text("Budget","budget").row()
   .text("Invite Partner","invite"); }
 function categoryKeyboard(){ return new InlineKeyboard().text("Venue","vendor:Venue").text("Catering","vendor:Katering").row().text("Photography","vendor:Fotografi").text("← Menu","menu"); }
 
@@ -74,11 +76,13 @@ export function createBot(token:string,publicUrl:string){
   bot.command("checklist",async ctx=>{if(!ctx.from)return;await ctx.reply(await checklistText(ctx.from.id),{reply_markup:await checklistKeyboard(ctx.from.id)});});
   bot.command("help",async ctx=>ctx.reply(`What Restu can do for you:\n\n${CAPABILITIES}\n\nTap the Dashboard button next to the message box to open Restu.ai anytime, or just send me any wedding question.`,{reply_markup:mainKeyboard(publicUrl)}));
   bot.command("invite",async ctx=>{if(!ctx.from)return;const code=await createInvite(ctx.from.id);const me=await ctx.api.getMe();await ctx.reply(`Invite your partner or family with this one-time link:\n\nhttps://t.me/${me.username}?start=invite_${code}\n\nAnyone with this link can join your wedding plan, so share it privately.`);});
+  bot.command("addtask",async ctx=>{if(!ctx.from)return;const title=ctx.match?.trim();if(!title){await ctx.reply("Add a task like this:\n\n/addtask Tempah baju pengantin");return;}const task=await addTask(ctx.from.id,title,"Planning");await ctx.reply(`Added to your checklist:\n● ${task.title}`,{reply_markup:new InlineKeyboard().text("Open checklist","checklist").webApp("Open Restu.ai",`${publicUrl}/app#plan`)});});
   bot.callbackQuery("menu",async ctx=>{await ctx.answerCallbackQuery();await ctx.editMessageText("What would you like to do?",{reply_markup:mainKeyboard(publicUrl)});});
   bot.callbackQuery("checklist",async ctx=>{await ctx.answerCallbackQuery();await ctx.editMessageText(await checklistText(ctx.from.id),{reply_markup:await checklistKeyboard(ctx.from.id)});});
   bot.callbackQuery(/^task:(.+)$/,async ctx=>{const task=await cycleTask(ctx.from.id,ctx.match[1]);await ctx.answerCallbackQuery(task?`${statusIcon[task.status]} ${task.title}`:"Task not found");await ctx.editMessageText(await checklistText(ctx.from.id),{reply_markup:await checklistKeyboard(ctx.from.id)});});
   bot.callbackQuery("countdown",async ctx=>{await ctx.answerCallbackQuery();const profile=await getProfile(ctx.from.id),days=daysUntil(profile.weddingDate);await ctx.reply(days===undefined?"Set your wedding date in the Mini App first.":days<0?"Your saved wedding date has passed. Update it in your profile.":`${days} days until your wedding\n${profile.location??"Location not set"}\n${(await progress(ctx.from.id)).percent}% wedding readiness`,{reply_markup:new InlineKeyboard().webApp("Open wedding plan",`${publicUrl}/app`)});});
-  bot.callbackQuery("ask",async ctx=>{await ctx.answerCallbackQuery();await ctx.reply("Ask me any wedding question—for example:\n\n“Berapa bajet katering untuk 500 pax di Shah Alam?”");});
+  bot.callbackQuery("ask",async ctx=>{await ctx.answerCallbackQuery();const kb=new InlineKeyboard();ASK_SUGGESTIONS.forEach((q,i)=>kb.text(q,`askq:${i}`).row());kb.webApp("Open Ask Restu",`${publicUrl}/app#ask`);await ctx.reply("Ask me anything about your wedding — tap a suggestion, or just type your question:",{reply_markup:kb});});
+  bot.callbackQuery(/^askq:(\d+)$/,async ctx=>{const q=ASK_SUGGESTIONS[Number(ctx.match[1])];await ctx.answerCallbackQuery();if(!q)return;await ctx.reply(`You: ${q}`);await ctx.replyWithChatAction("typing");try{await saveChat(ctx.from.id,"user",q);const answer=await askAI(ctx.from.id,q);await saveChat(ctx.from.id,"assistant",answer);await ctx.reply(answer,{reply_markup:new InlineKeyboard().text("Ask another","ask").webApp("Open Restu.ai",`${publicUrl}/app`)});}catch(error){console.error("AI error",error);await ctx.reply("Restu AI is temporarily unavailable. Please try again shortly.");}});
   bot.callbackQuery("budget",async ctx=>{await ctx.answerCallbackQuery();const p=await getProfile(ctx.from.id);const perGuest=p.guestCount?Math.round(p.budget/p.guestCount):0;await ctx.reply(`Your wedding budget\n\nTotal: RM${p.budget.toLocaleString("en-MY")}\nGuests: ${p.guestCount.toLocaleString("en-MY")}\nAverage: RM${perGuest.toLocaleString("en-MY")} per guest\nEmergency buffer: RM${Math.round(p.budget*.1).toLocaleString("en-MY")}`,{reply_markup:new InlineKeyboard().webApp("Open Budget Planner",`${publicUrl}/app#budget`)});});
   bot.callbackQuery("invite",async ctx=>{await ctx.answerCallbackQuery();const code=await createInvite(ctx.from.id),me=await ctx.api.getMe();await ctx.reply(`Plan together\n\nShare this one-time link privately with your partner or family:\nhttps://t.me/${me.username}?start=invite_${code}`);});
   bot.callbackQuery("vendors",async ctx=>{await ctx.answerCallbackQuery();await ctx.reply("Choose a vendor category:",{reply_markup:categoryKeyboard()});});
