@@ -4,9 +4,8 @@ import { acceptInvite, chatHistory, createInvite, cycleTask, getProfile, progres
 const statusIcon:any = { not_started:"○",in_progress:"◐",completed:"●",need_review:"◎" };
 function mainKeyboard(publicUrl:string) { return new InlineKeyboard()
   .webApp("Open Restu.ai Dashboard",`${publicUrl}/app`).row()
-  .text("Today’s Plan","checklist").text("Countdown","countdown").row()
-  .text("Ask Restu","ask").text("Find Vendors","vendors").row()
-  .text("Budget Summary","budget").text("Invite Partner","invite"); }
+  .text("Ask Restu","ask").text("Today’s Plan","checklist").row()
+  .text("Invite Partner","invite"); }
 function roleKeyboard(){ return new InlineKeyboard().text("Bride","role:bride").text("Groom","role:groom").row().text("Family","role:family"); }
 function categoryKeyboard(){ return new InlineKeyboard().text("Venue","vendor:Venue").text("Catering","vendor:Katering").row().text("Photography","vendor:Fotografi").text("← Menu","menu"); }
 function guestKeyboard(){return new InlineKeyboard().text("100–300","guests:200").text("300–500","guests:400").row().text("500–800","guests:650").text("800+","guests:900");}
@@ -64,9 +63,9 @@ async function continueOnboarding(ctx:any) {
 
 export function createBot(token:string,publicUrl:string){
   const bot=new Bot(token); bot.use(async(ctx,next)=>{(ctx as any).publicUrl=publicUrl;await next();});
-  bot.command("start",async ctx=>{ if(!ctx.from)return;const payload=ctx.match?.trim();if(payload?.startsWith("invite_")){const accepted=await acceptInvite(ctx.from.id,payload.slice(7));await ctx.reply(accepted?"You have joined the shared wedding plan.":"This invitation is invalid or has already been used.");if(accepted){await ctx.reply("Open the shared plan:",{reply_markup:mainKeyboard(publicUrl)});return;}} const profile=await getProfile(ctx.from.id,ctx.from.first_name); if(profile.onboardingStep!=="complete"){await continueOnboarding(ctx);return;} await ctx.reply(`Welcome back, ${ctx.from.first_name}.\n\nWhat would you like to plan today?`,{reply_markup:mainKeyboard(publicUrl)}); });
+  bot.command("start",async ctx=>{ if(!ctx.from)return;const payload=ctx.match?.trim();if(payload?.startsWith("invite_")){const accepted=await acceptInvite(ctx.from.id,payload.slice(7));await ctx.reply(accepted?"You have joined the shared wedding plan.":"This invitation is invalid or has already been used.");if(accepted){await ctx.reply("Open the shared plan:",{reply_markup:mainKeyboard(publicUrl)});return;}} const profile=await getProfile(ctx.from.id,ctx.from.first_name); if(profile.onboardingStep!=="complete"){await continueOnboarding(ctx);return;} await ctx.reply(`Welcome back, ${ctx.from.first_name}.\n\nYour wedding dashboard is ready — open it below, or just ask me anything.`,{reply_markup:mainKeyboard(publicUrl)}); });
   bot.command("checklist",async ctx=>{if(!ctx.from)return;await ctx.reply(await checklistText(ctx.from.id),{reply_markup:await checklistKeyboard(ctx.from.id)});});
-  bot.command("help",async ctx=>ctx.reply("Use /start for the menu, /checklist for tasks, or simply send any wedding question to Ask Restu AI."));
+  bot.command("help",async ctx=>ctx.reply("Tap the Dashboard button (next to the message box) to open Restu.ai anytime.\n\nOr use /start for the menu, /checklist for tasks, or just send any wedding question to Ask Restu AI.",{reply_markup:mainKeyboard(publicUrl)}));
   bot.command("invite",async ctx=>{if(!ctx.from)return;const code=await createInvite(ctx.from.id);const me=await ctx.api.getMe();await ctx.reply(`Invite your partner or family with this one-time link:\n\nhttps://t.me/${me.username}?start=invite_${code}\n\nAnyone with this link can join your wedding plan, so share it privately.`);});
   bot.callbackQuery(/^role:(bride|groom|family)$/,async ctx=>{await updateProfile(ctx.from.id,{role:ctx.match[1] as any,onboardingStep:"date"});await ctx.answerCallbackQuery();await ctx.editMessageText("Great! What is the wedding date?\n\nEnter it as YYYY-MM-DD, for example 2027-12-14.");});
   bot.callbackQuery(/^location:(.+)$/,async ctx=>{await updateProfile(ctx.from.id,{location:ctx.match[1],onboardingStep:"budget"});await ctx.answerCallbackQuery();await ctx.editMessageText("What is your estimated total budget?\n\nChoose a range or type the amount in RM.",{reply_markup:budgetKeyboard()});});
