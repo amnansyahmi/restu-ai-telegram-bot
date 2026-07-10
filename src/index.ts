@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import { webhookCallback } from "grammy";
-import { askAI, askAIStream, createBot } from "./bot.js";
+import { askAI, askAIStream, checkAI, createBot } from "./bot.js";
 import { checkStorage, cycleTask, dueReminders, getProfile, markReminderSent, progress, saveChat, storageMode, tasksFor, toggleCompareVendor, toggleSavedVendor, updateProfile, vendorState, vendors } from "./store.js";
 import { telegramUser } from "./telegram-auth.js";
 
@@ -11,7 +11,7 @@ const port=Number(process.env.PORT??3000); if(!token) throw new Error("TELEGRAM_
 const botToken:string=token;
 const app=express(),bot=createBot(botToken,publicUrl),useWebhook=publicUrl.startsWith("https://");
 app.use(express.json({limit:"100kb"})); app.use(express.static("public"));
-app.get("/health",async(_req,res)=>{const db=await checkStorage();res.json({ok:true,storage:storageMode(),db});});
+app.get("/health",async(req,res)=>{const db=await checkStorage();const body:any={ok:true,storage:storageMode(),db};if(req.query.ai)body.ai=await checkAI();res.json(body);});
 
 function api(handler:(req:any,res:any,userId:number)=>Promise<any>){return async(req:any,res:any)=>{try{const userId=telegramUser(req,botToken);await handler(req,res,userId);}catch(error:any){res.status(error?.message?.includes("Telegram")?401:500).json({error:error?.message??"Unexpected error"});}};}
 app.get("/api/dashboard",api(async(_req,res,userId)=>{const [profile,tasks,value,vendorList]=await Promise.all([getProfile(userId),tasksFor(userId),progress(userId),vendorState(userId)]);res.json({profile,tasks,progress:value,vendors:vendorList});}));
