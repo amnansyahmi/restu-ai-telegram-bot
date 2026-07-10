@@ -11,5 +11,11 @@ services:
         sync: false
       - key: PUBLIC_URL
         sync: false
+      - key: AI_NONYMAUZ_CLOUD_URL
+        sync: false
+      - key: AI_NONYMAUZ_CLOUD_API_KEY
+        sync: false
+      - key: AI_NONYMAUZ_CLOUD_MODEL
+        sync: false
       - key: NODE_VERSION
         value: 22
