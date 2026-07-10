@@ -6,6 +6,9 @@
 @font-face{font-family:'Plus Jakarta Sans';font-weight:400 800;font-style:normal;font-display:swap;src:url(/app/fonts/pjs.woff2) format('woff2')}
 @font-face{font-family:'Fraunces';font-weight:400 600;font-style:normal;font-display:swap;src:url(/app/fonts/fraunces.woff2) format('woff2')}
 :root{--em:#0f5140;--em2:#26705d;--gold:#c39a46;--cream:#f7f3e9;--paper:#fffefa;--ink:#18362e;--muted:#76817d;--line:#e4e7e1}
+:root[data-theme="rose"]{--em:#9c5d67;--em2:#b3737c;--gold:#c79a4f;--cream:#faf2ef;--paper:#fffcfa;--ink:#4a2f33;--muted:#8a746f;--line:#ecdfda}
+:root[data-theme="midnight"]{--em:#212f4d;--em2:#334768;--gold:#c9a24c;--cream:#f1f2ef;--paper:#fffefb;--ink:#1e2636;--muted:#6d7688;--line:#e2e2dc}
+:root[data-theme="champagne"]{--em:#8a7250;--em2:#a3875f;--gold:#b9954f;--cream:#f7f2e9;--paper:#fffdf8;--ink:#43392b;--muted:#8b7f6c;--line:#ece4d5}
 *{box-sizing:border-box;margin:0}body{background:var(--cream);color:var(--ink);font:15px/1.55 "Plus Jakarta Sans",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
 .wrap{max-width:520px;margin:auto;min-height:100dvh;padding:20px 16px 40px}
 .card{background:var(--paper);border-radius:26px;overflow:hidden;box-shadow:0 20px 50px rgba(15,81,64,.12);border:1px solid #ece7d8}
@@ -47,6 +50,7 @@ function daysTo(d){if(!d)return null;const t=new Date(d+'T00:00:00');if(isNaN(t)
 async function load(){
   try{
     const r=await fetch('/api/card/'+id);if(!r.ok)throw 0;const c=await r.json();
+    document.documentElement.dataset.theme=c.theme||'emerald';
     const couple=(c.name&&c.partnerName)?`${esc(c.name)} & ${esc(c.partnerName)}`:esc(c.name||c.partnerName||'Our Wedding');
     const days=daysTo(c.weddingDate);
     const venue=c.venue||c.location;
