@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { webhookCallback } from "grammy";
 import { askAI, askAIStream, checkAI, createBot } from "./bot.js";
-import { addGuest, addTask, allWeddings, budgetItems, checkStorage, cycleTask, dueReminders, getProfile, guests, markReminderSent, progress, removeGuest, saveChat, setBudgetItem, setGuestRsvp, setTaskDone, storageMode, tasksFor, toggleCompareVendor, toggleSavedVendor, updateProfile, vendorState, vendors } from "./store.js";
+import { addGuest, addTask, allWeddings, budgetItems, cardData, cardRsvp, checkStorage, cycleTask, dueReminders, getProfile, guests, markReminderSent, progress, removeGuest, saveChat, setBudgetItem, setGuestRsvp, setTaskDone, storageMode, tasksFor, toggleCompareVendor, toggleSavedVendor, updateProfile, vendorState, vendors } from "./store.js";
 import { telegramUser } from "./telegram-auth.js";
 
 const token=process.env.TELEGRAM_BOT_TOKEN;
@@ -11,6 +11,7 @@ const port=Number(process.env.PORT??3000); if(!token) throw new Error("TELEGRAM_
 const botToken:string=token;
 const app=express(),bot=createBot(botToken,publicUrl),useWebhook=publicUrl.startsWith("https://");
 app.use(express.json({limit:"100kb"})); app.use(express.static("public"));
+app.get("/card/:weddingId",(_req,res)=>res.sendFile("card/index.html",{root:process.cwd()+"/public"}));
 app.get("/health",async(req,res)=>{const db=await checkStorage();const body:any={ok:true,storage:storageMode(),db};if(req.query.ai)body.ai=await checkAI();res.json(body);});
 
 function api(handler:(req:any,res:any,userId:number)=>Promise<any>){return async(req:any,res:any)=>{try{const userId=telegramUser(req,botToken);await handler(req,res,userId);}catch(error:any){res.status(error?.message?.includes("Telegram")?401:500).json({error:error?.message??"Unexpected error"});}};}
@@ -23,9 +24,11 @@ app.get("/api/guests",api(async(_req,res,userId)=>res.json(await guests(userId))
 app.post("/api/guests",api(async(req,res,userId)=>{const name=String(req.body?.name??"").trim();if(!name)return res.status(400).json({error:"Name required"});res.json(await addGuest(userId,name,Number(req.body?.pax)||1));}));
 app.patch("/api/guests/:id",api(async(req,res,userId)=>{const rsvp=String(req.body?.rsvp);if(!["pending","yes","no"].includes(rsvp))return res.status(400).json({error:"Invalid RSVP"});const g=await setGuestRsvp(userId,req.params.id,rsvp as any);if(!g)return res.status(404).json({error:"Guest not found"});res.json(g);}));
 app.delete("/api/guests/:id",api(async(req,res,userId)=>{await removeGuest(userId,req.params.id);res.json({ok:true});}));
+app.get("/api/card/:weddingId",async(req,res)=>{try{const card=await cardData(req.params.weddingId);if(!card)return res.status(404).json({error:"Invitation not found"});res.json(card);}catch(error:any){res.status(500).json({error:error?.message??"Error"});}});
+app.post("/api/card/:weddingId/rsvp",async(req,res)=>{try{const name=String(req.body?.name??"").trim();if(!name)return res.status(400).json({error:"Name required"});const rsvp=String(req.body?.rsvp);if(!["yes","no"].includes(rsvp))return res.status(400).json({error:"Invalid RSVP"});const ok=await cardRsvp(req.params.weddingId,name,Number(req.body?.pax)||1,rsvp as any);if(!ok)return res.status(404).json({error:"Invitation not found"});res.json({ok:true});}catch(error:any){res.status(500).json({error:error?.message??"Error"});}});
 app.get("/api/budget",api(async(_req,res,userId)=>res.json(await budgetItems(userId))));
 app.patch("/api/budget/:category",api(async(req,res,userId)=>{const patch:any={};if(req.body?.allocated!=null)patch.allocated=Math.max(0,Number(req.body.allocated)||0);if(req.body?.spent!=null)patch.spent=Math.max(0,Number(req.body.spent)||0);res.json(await setBudgetItem(userId,req.params.category,patch));}));
-app.patch("/api/profile",api(async(req,res,userId)=>{const allowed=["partnerName","weddingDate","location","budget","guestCount","eventType","remindersEnabled"];const patch=Object.fromEntries(Object.entries(req.body??{}).filter(([key])=>allowed.includes(key)));res.json(await updateProfile(userId,patch));}));
+app.patch("/api/profile",api(async(req,res,userId)=>{const allowed=["partnerName","weddingDate","location","budget","guestCount","eventType","remindersEnabled","venue","ceremonyTime","hosts","cardMessage"];const patch=Object.fromEntries(Object.entries(req.body??{}).filter(([key])=>allowed.includes(key)));res.json(await updateProfile(userId,patch));}));
 app.get("/api/vendors",api(async(req,res)=>res.json(await vendors(typeof req.query.category==="string"?req.query.category:undefined))));
 app.post("/api/vendors/:vendorId/save",api(async(req,res,userId)=>res.json({saved:await toggleSavedVendor(userId,req.params.vendorId)})));
 app.post("/api/vendors/:vendorId/compare",api(async(req,res,userId)=>res.json({compareSelected:await toggleCompareVendor(userId,req.params.vendorId)})));

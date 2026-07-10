@@ -16,6 +16,10 @@ export type Profile = {
   eventType: string;
   onboardingStep: string;
   remindersEnabled: boolean;
+  venue?: string;
+  ceremonyTime?: string;
+  hosts?: string;
+  cardMessage?: string;
 };
 export type Vendor = { id: string; name: string; category: string; location: string; priceFrom: number; completionScore: number; description?: string };
 export type Guest = { id: string; name: string; rsvp: "pending" | "yes" | "no"; pax: number };
@@ -61,7 +65,8 @@ function mapProfile(row: any): Profile {
     role:row.role ?? undefined, partnerName:row.partner_name ?? undefined, weddingDate:row.wedding_date ?? undefined,
     location:row.location ?? undefined, budget:Number(row.budget ?? 0), guestCount:row.guest_count ?? 0,
     eventType:row.event_type ?? "Nikah + Resepsi", onboardingStep:row.onboarding_step ?? "role",
-    remindersEnabled:row.reminders_enabled ?? true };
+    remindersEnabled:row.reminders_enabled ?? true,
+    venue:row.card_venue ?? undefined, ceremonyTime:row.card_time ?? undefined, hosts:row.card_hosts ?? undefined, cardMessage:row.card_message ?? undefined };
 }
 
 async function seedTasks(weddingId: string) {
@@ -108,7 +113,7 @@ export async function updateProfile(telegramId: number, patch: Partial<Profile>)
   const updated = { ...profile, ...patch };
   if (db) {
     const fields:any = {};
-    const mapping:any = { name:"owner_name",role:"role",partnerName:"partner_name",weddingDate:"wedding_date",location:"location",budget:"budget",guestCount:"guest_count",eventType:"event_type",onboardingStep:"onboarding_step",remindersEnabled:"reminders_enabled" };
+    const mapping:any = { name:"owner_name",role:"role",partnerName:"partner_name",weddingDate:"wedding_date",location:"location",budget:"budget",guestCount:"guest_count",eventType:"event_type",onboardingStep:"onboarding_step",remindersEnabled:"reminders_enabled",venue:"card_venue",ceremonyTime:"card_time",hosts:"card_hosts",cardMessage:"card_message" };
     for (const [key,value] of Object.entries(patch)) if (mapping[key]) fields[mapping[key]] = value;
     fields.updated_at = new Date().toISOString();
     const { data,error } = await db.from("weddings").update(fields).eq("id",profile.weddingId).select("*").single();
@@ -201,6 +206,21 @@ export async function removeGuest(telegramId:number, guestId:string):Promise<voi
   if(!db){ memoryGuests.set(telegramId,(memoryGuests.get(telegramId)??[]).filter(x=>x.id!==guestId)); return; }
   const profile=await getProfile(telegramId);
   const {error}=await db.from("guests").delete().eq("wedding_id",profile.weddingId).eq("id",guestId); if(error) throw dbError(error);
+}
+
+export async function profileByWeddingId(weddingId:string):Promise<Profile|undefined> {
+  if(!db) return [...profiles.values()].find(p=>p.weddingId===weddingId);
+  const {data,error}=await db.from("weddings").select("*").eq("id",weddingId).maybeSingle();
+  if(error) throw dbError(error); return data?mapProfile(data):undefined;
+}
+export async function cardData(weddingId:string) {
+  const p=await profileByWeddingId(weddingId); if(!p) return undefined;
+  return { name:p.name, partnerName:p.partnerName, weddingDate:p.weddingDate, location:p.location, eventType:p.eventType, venue:p.venue, ceremonyTime:p.ceremonyTime, hosts:p.hosts, cardMessage:p.cardMessage };
+}
+export async function cardRsvp(weddingId:string, name:string, pax:number, rsvp:Guest["rsvp"]):Promise<boolean> {
+  const clean=name.trim().slice(0,80); if(!clean) return false; const p=Math.max(1,Math.min(50,Math.round(pax)||1));
+  if(!db){ const owner=[...profiles.values()].find(x=>x.weddingId===weddingId); if(!owner) return false; const list=memoryGuests.get(owner.telegramId)??[]; list.push({id:randomUUID(),name:clean,rsvp,pax:p}); memoryGuests.set(owner.telegramId,list); return true; }
+  const {error}=await db.from("guests").insert({wedding_id:weddingId,name:clean,rsvp,pax:p}); if(error) throw dbError(error); return true;
 }
 
 export async function vendors(category?:string):Promise<Vendor[]> {
