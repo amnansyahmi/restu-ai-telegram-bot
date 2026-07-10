@@ -14,6 +14,30 @@ const QUIZ:{question:string;options:string[];correct:number;explanation:string}[
   {question:"How much of your budget should you keep as an emergency buffer?",options:["About 10%","0%","About 50%","About 90%"],correct:0,explanation:"Set aside roughly 10% for last-minute surprises."},
   {question:"What is 'merisik'?",options:["The enquiry/proposal visit","The reception","The nikah","The honeymoon"],correct:0,explanation:"Merisik is the first visit by the man's family to enquire about the woman."}
 ];
+const STYLE_Q:{q:string;a:{t:string;v:string};b:{t:string;v:string}}[] = [
+  {q:"Your dream wedding setting?",a:{t:"Grand ballroom",v:"G"},b:{t:"Garden or intimate space",v:"I"}},
+  {q:"The overall vibe?",a:{t:"Traditional adat",v:"T"},b:{t:"Modern & sleek",v:"M"}},
+  {q:"Your guest list looks like…",a:{t:"The whole kampung",v:"G"},b:{t:"Close family & friends",v:"I"}},
+  {q:"Your décor style?",a:{t:"Classic pelamin",v:"T"},b:{t:"Minimalist & chic",v:"M"}},
+  {q:"Entertainment of choice?",a:{t:"Live kompang & band",v:"T"},b:{t:"Curated playlist",v:"M"}}
+];
+const STYLE_RESULT:Record<string,[string,string]> = {
+  "Grand Traditional":["The Grand Traditionalist","A big, adat-rich celebration with all the trimmings — pelamin, kompang and the whole kampung."],
+  "Intimate Traditional":["The Intimate Classic","A warm, traditional majlis kept close — meaningful adat with your nearest and dearest."],
+  "Grand Modern":["The Modern Statement","A large, stylish affair — sleek décor, great music and a wow-factor venue."],
+  "Intimate Modern":["The Chic Minimalist","A small, elegant celebration — minimalist, personal and effortlessly cool."]
+};
+function styleStep(seq:string,publicUrl:string){
+  const idx=seq.length;
+  if(idx>=STYLE_Q.length){
+    const count=(l:string)=>seq.split(l).length-1;
+    const scale=count("G")>=count("I")?"Grand":"Intimate", tone=count("T")>=count("M")?"Traditional":"Modern";
+    const [name,desc]=STYLE_RESULT[`${scale} ${tone}`];
+    return {text:`Your wedding style is…\n\n${name}\n\n${desc}`,keyboard:new InlineKeyboard().text("Play again","style:").row().webApp("Plan it in Restu.ai",`${publicUrl}/app`)};
+  }
+  const q=STYLE_Q[idx];
+  return {text:`Wedding Style · ${idx+1}/${STYLE_Q.length}\n\n${q.q}`,keyboard:new InlineKeyboard().text(q.a.t,`style:${seq}${q.a.v}`).row().text(q.b.t,`style:${seq}${q.b.v}`)};
+}
 const errText = (e:any) => typeof e==="string" ? e : (e?.message || JSON.stringify(e).slice(0,200));
 // Parse an OpenAI-compatible completion body that may be JSON or a Server-Sent-Events stream.
 function parseCompletion(raw:string):{content?:string;error?:string}{
@@ -28,7 +52,8 @@ function mainKeyboard(publicUrl:string) { return new InlineKeyboard()
   .webApp("Open Restu.ai Dashboard",`${publicUrl}/app`).row()
   .text("Ask Restu","ask").text("Today’s Plan","checklist").row()
   .text("Countdown","countdown").text("Budget","budget").row()
-  .text("Wedding Quiz","quiz").text("Invite Partner","invite"); }
+  .text("Wedding Quiz","quiz").text("Style Quiz","style:").row()
+  .text("Invite Partner","invite"); }
 function categoryKeyboard(){ return new InlineKeyboard().text("Venue","vendor:Venue").text("Catering","vendor:Katering").row().text("Photography","vendor:Fotografi").text("← Menu","menu"); }
 
 async function checklistKeyboard(userId:number) { const keyboard=new InlineKeyboard(); for(const task of await tasksFor(userId)) keyboard.text(`${statusIcon[task.status]} ${task.title}`,`task:${task.id}`).row(); return keyboard.text("← Main menu","menu"); }
@@ -88,6 +113,8 @@ export function createBot(token:string,publicUrl:string){
   bot.command("help",async ctx=>ctx.reply(`What Restu can do for you:\n\n${CAPABILITIES}\n\nTap the Dashboard button next to the message box to open Restu.ai anytime, or just send me any wedding question.`,{reply_markup:mainKeyboard(publicUrl)}));
   bot.command("invite",async ctx=>{if(!ctx.from)return;const code=await createInvite(ctx.from.id);const me=await ctx.api.getMe();await ctx.reply(`Invite your partner or family with this one-time link:\n\nhttps://t.me/${me.username}?start=invite_${code}\n\nAnyone with this link can join your wedding plan, so share it privately.`);});
   bot.command("quiz",async ctx=>{if(!ctx.from)return;await sendQuiz(ctx);});
+  bot.command("style",async ctx=>{if(!ctx.from)return;const s=styleStep("",publicUrl);await ctx.reply(s.text,{reply_markup:s.keyboard});});
+  bot.callbackQuery(/^style:([GITM]*)$/,async ctx=>{await ctx.answerCallbackQuery();const s=styleStep(ctx.match[1],publicUrl);await ctx.editMessageText(s.text,{reply_markup:s.keyboard});});
   bot.command("addtask",async ctx=>{if(!ctx.from)return;const title=ctx.match?.trim();if(!title){await ctx.reply("Add a task like this:\n\n/addtask Tempah baju pengantin");return;}const task=await addTask(ctx.from.id,title,"Planning");await ctx.reply(`Added to your checklist:\n● ${task.title}`,{reply_markup:new InlineKeyboard().text("Open checklist","checklist").webApp("Open Restu.ai",`${publicUrl}/app#plan`)});});
   bot.callbackQuery("menu",async ctx=>{await ctx.answerCallbackQuery();await ctx.editMessageText("What would you like to do?",{reply_markup:mainKeyboard(publicUrl)});});
   bot.callbackQuery("checklist",async ctx=>{await ctx.answerCallbackQuery();await ctx.editMessageText(await checklistText(ctx.from.id),{reply_markup:await checklistKeyboard(ctx.from.id)});});
