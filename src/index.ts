@@ -5,7 +5,11 @@ import { createBot } from "./bot.js";
 import { tasksFor, toggleTask } from "./store.js";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
-const publicUrl = (process.env.PUBLIC_URL ?? "http://localhost:3000").replace(/\/$/, "");
+const publicUrl = (
+  process.env.PUBLIC_URL?.trim() ||
+  process.env.RENDER_EXTERNAL_URL?.trim() ||
+  "http://localhost:3000"
+).replace(/\/$/, "");
 const port = Number(process.env.PORT ?? 3000);
 
 if (!token) throw new Error("TELEGRAM_BOT_TOKEN is required. Copy .env.example to .env.");
@@ -41,6 +45,7 @@ if (useWebhook) {
 
 app.listen(port, async () => {
   console.log(`Restu bot listening on port ${port}`);
+  console.log(`Bot transport: ${useWebhook ? "webhook" : "long polling"}`);
   if (useWebhook) {
     await bot.api.setWebhook(`${publicUrl}/telegram/webhook`);
     console.log("Telegram webhook configured");
