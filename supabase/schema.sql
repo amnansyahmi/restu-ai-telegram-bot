@@ -75,6 +75,15 @@ create table if not exists chat_messages (
   created_at timestamptz default now()
 );
 
+create table if not exists guests (
+  id uuid primary key default gen_random_uuid(),
+  wedding_id uuid references weddings(id) on delete cascade not null,
+  name text not null,
+  rsvp text default 'pending' check (rsvp in ('pending','yes','no')),
+  pax integer default 1,
+  created_at timestamptz default now()
+);
+
 -- Idempotent migrations: bring databases created by an older schema up to date.
 -- Safe to run repeatedly; "add column if not exists" is a no-op when present.
 alter table weddings add column if not exists reminders_enabled boolean default true;
@@ -84,6 +93,7 @@ alter table saved_vendors add column if not exists compare_selected boolean defa
 
 create index if not exists tasks_wedding_idx on tasks(wedding_id);
 create index if not exists chat_wedding_idx on chat_messages(wedding_id, created_at);
+create index if not exists guests_wedding_idx on guests(wedding_id);
 
 -- The server uses the service-role key. Never expose that key in the Mini App.
 alter table weddings enable row level security;
@@ -92,6 +102,7 @@ alter table tasks enable row level security;
 alter table budget_items enable row level security;
 alter table saved_vendors enable row level security;
 alter table chat_messages enable row level security;
+alter table guests enable row level security;
 
 insert into vendors (name, category, location, price_from, completion_score, description)
 select * from (values

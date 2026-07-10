@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { webhookCallback } from "grammy";
 import { askAI, askAIStream, checkAI, createBot } from "./bot.js";
-import { addTask, budgetItems, checkStorage, cycleTask, dueReminders, getProfile, markReminderSent, progress, saveChat, setBudgetItem, setTaskDone, storageMode, tasksFor, toggleCompareVendor, toggleSavedVendor, updateProfile, vendorState, vendors } from "./store.js";
+import { addGuest, addTask, budgetItems, checkStorage, cycleTask, dueReminders, getProfile, guests, markReminderSent, progress, removeGuest, saveChat, setBudgetItem, setGuestRsvp, setTaskDone, storageMode, tasksFor, toggleCompareVendor, toggleSavedVendor, updateProfile, vendorState, vendors } from "./store.js";
 import { telegramUser } from "./telegram-auth.js";
 
 const token=process.env.TELEGRAM_BOT_TOKEN;
@@ -19,6 +19,10 @@ app.get("/api/tasks",api(async(_req,res,userId)=>res.json(await tasksFor(userId)
 app.post("/api/tasks/:taskId/cycle",api(async(req,res,userId)=>{const task=await cycleTask(userId,req.params.taskId);if(!task)return res.status(404).json({error:"Task not found"});res.json(task);}));
 app.post("/api/tasks/:taskId/toggle",api(async(req,res,userId)=>{const task=await setTaskDone(userId,req.params.taskId,Boolean(req.body?.done));if(!task)return res.status(404).json({error:"Task not found"});res.json(task);}));
 app.post("/api/tasks",api(async(req,res,userId)=>{const title=String(req.body?.title??"").trim();if(!title)return res.status(400).json({error:"Title required"});res.json(await addTask(userId,title,String(req.body?.category??"Planning"))); }));
+app.get("/api/guests",api(async(_req,res,userId)=>res.json(await guests(userId))));
+app.post("/api/guests",api(async(req,res,userId)=>{const name=String(req.body?.name??"").trim();if(!name)return res.status(400).json({error:"Name required"});res.json(await addGuest(userId,name,Number(req.body?.pax)||1));}));
+app.patch("/api/guests/:id",api(async(req,res,userId)=>{const rsvp=String(req.body?.rsvp);if(!["pending","yes","no"].includes(rsvp))return res.status(400).json({error:"Invalid RSVP"});const g=await setGuestRsvp(userId,req.params.id,rsvp as any);if(!g)return res.status(404).json({error:"Guest not found"});res.json(g);}));
+app.delete("/api/guests/:id",api(async(req,res,userId)=>{await removeGuest(userId,req.params.id);res.json({ok:true});}));
 app.get("/api/budget",api(async(_req,res,userId)=>res.json(await budgetItems(userId))));
 app.patch("/api/budget/:category",api(async(req,res,userId)=>{const patch:any={};if(req.body?.allocated!=null)patch.allocated=Math.max(0,Number(req.body.allocated)||0);if(req.body?.spent!=null)patch.spent=Math.max(0,Number(req.body.spent)||0);res.json(await setBudgetItem(userId,req.params.category,patch));}));
 app.patch("/api/profile",api(async(req,res,userId)=>{const allowed=["partnerName","weddingDate","location","budget","guestCount","eventType","remindersEnabled"];const patch=Object.fromEntries(Object.entries(req.body??{}).filter(([key])=>allowed.includes(key)));res.json(await updateProfile(userId,patch));}));
