@@ -68,11 +68,17 @@ The service-role key is server-only. Never expose it in browser code.
 Set these Render variables:
 
 ```text
-RESTU_AI_URL=https://your-ai-service.example.com
-RESTU_AI_API_KEY=optional-secret
+AI_NONYMAUZ_CLOUD_URL=https://your-ai-service.example.com
+AI_NONYMAUZ_CLOUD_API_KEY=optional-secret
 ```
 
 The service calls the OpenAI-compatible `/v1/chat/completions` endpoint and injects the user's wedding profile into the system context.
+
+`RESTU_AI_URL` and `RESTU_AI_API_KEY` remain supported as aliases.
+
+## Vendor shortlist and comparison
+
+Users can save vendors and add up to three vendors to a persistent comparison. If Supabase was configured before this feature was added, rerun `supabase/schema.sql` once so the safe `compare_selected` migration is applied.
 
 ## 6. Reminders
 
