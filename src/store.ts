@@ -47,6 +47,8 @@ const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 const db: SupabaseClient | undefined = url && key ? createClient(url, key, { auth: { persistSession:false } }) : undefined;
 const profiles = new Map<number, Profile>();
 const memoryTasks = new Map<number, Task[]>();
+const memoryBudget = new Map<number, { category:string; allocated:number; spent:number }[]>();
+const DEFAULT_ALLOC:[string,number][] = [["Food & Catering",.37],["Venue & Rental",.15],["Pelamin & Decoration",.10],["Photo & Video",.08],["Attire & Makeup",.11],["Gifts & PA System",.09],["Emergency Buffer",.10]];
 const messages = new Map<number, { role:"user"|"assistant"; content:string }[]>();
 const inviteOwners = new Map<string,number>();
 const collaboratorOwners = new Map<number,number>();
@@ -154,6 +156,24 @@ export async function addTask(telegramId:number, title:string, category:string):
 }
 
 export async function progress(telegramId:number) { const tasks=await tasksFor(telegramId); const completed=tasks.filter(x=>x.status==="completed").length; return {completed,total:tasks.length,percent:tasks.length?Math.round(completed/tasks.length*100):0}; }
+
+export type BudgetItem = { category:string; allocated:number; spent:number };
+export async function budgetItems(telegramId:number):Promise<BudgetItem[]> {
+  const profile=await getProfile(telegramId);
+  const seed=()=>DEFAULT_ALLOC.map(([category,pc])=>({category,allocated:Math.round((profile.budget||0)*pc),spent:0}));
+  if(!db){ if(!memoryBudget.has(telegramId)) memoryBudget.set(telegramId,seed()); return memoryBudget.get(telegramId)!; }
+  const {data,error}=await db.from("budget_items").select("category,allocated,spent").eq("wedding_id",profile.weddingId);
+  if(error) throw dbError(error);
+  if(!data||!data.length){ const rows=seed(); const ins=await db.from("budget_items").insert(rows.map(r=>({wedding_id:profile.weddingId,...r}))); if(ins.error) throw dbError(ins.error); return rows; }
+  return data.map((x:any)=>({category:x.category,allocated:Number(x.allocated),spent:Number(x.spent)}));
+}
+export async function setBudgetItem(telegramId:number, category:string, patch:{allocated?:number;spent?:number}):Promise<BudgetItem> {
+  const profile=await getProfile(telegramId);
+  if(!db){ const items=memoryBudget.get(telegramId)??[]; let it=items.find(x=>x.category===category); if(!it){it={category,allocated:0,spent:0};items.push(it);} if(patch.allocated!=null)it.allocated=patch.allocated; if(patch.spent!=null)it.spent=patch.spent; memoryBudget.set(telegramId,items); return it; }
+  const fields:any={wedding_id:profile.weddingId,category}; if(patch.allocated!=null)fields.allocated=patch.allocated; if(patch.spent!=null)fields.spent=patch.spent;
+  const {data,error}=await db.from("budget_items").upsert(fields,{onConflict:"wedding_id,category"}).select("category,allocated,spent").single(); if(error) throw dbError(error);
+  return {category:data.category,allocated:Number(data.allocated),spent:Number(data.spent)};
+}
 
 export async function vendors(category?:string):Promise<Vendor[]> {
   if (!db) return category ? seedVendors.filter(x=>x.category===category) : seedVendors;
