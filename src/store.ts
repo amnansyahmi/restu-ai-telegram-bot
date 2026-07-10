@@ -147,8 +147,13 @@ export async function vendors(category?:string):Promise<Vendor[]> {
 export async function vendorState(telegramId:number) {
   const list=await vendors(),profile=await getProfile(telegramId);
   if(!db){const state=memorySaved.get(telegramId)??new Map();return list.map(v=>({...v,saved:state.has(v.id),compareSelected:state.get(v.id)===true}));}
-  const {data,error}=await db.from("saved_vendors").select("vendor_id,compare_selected").eq("wedding_id",profile.weddingId);if(error)throw dbError(error);
-  const state=new Map((data??[]).map((x:any)=>[x.vendor_id,x.compare_selected]));return list.map(v=>({...v,saved:state.has(v.id),compareSelected:state.get(v.id)===true}));
+  let rows=await db.from("saved_vendors").select("vendor_id,compare_selected").eq("wedding_id",profile.weddingId);
+  if(rows.error){ // Older database without the compare_selected column: degrade gracefully so the dashboard still loads.
+    const basic=await db.from("saved_vendors").select("vendor_id").eq("wedding_id",profile.weddingId);
+    if(basic.error) throw dbError(rows.error);
+    rows={data:(basic.data??[]).map((x:any)=>({vendor_id:x.vendor_id,compare_selected:false})),error:null} as any;
+  }
+  const state=new Map((rows.data??[]).map((x:any)=>[x.vendor_id,x.compare_selected]));return list.map(v=>({...v,saved:state.has(v.id),compareSelected:state.get(v.id)===true}));
 }
 
 export async function toggleSavedVendor(telegramId:number,vendorId:string) {
