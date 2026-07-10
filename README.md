@@ -70,11 +70,12 @@ Set these Render variables:
 ```text
 AI_NONYMAUZ_CLOUD_URL=https://your-ai-service.example.com
 AI_NONYMAUZ_CLOUD_API_KEY=optional-secret
+AI_NONYMAUZ_CLOUD_MODEL=restu-ai
 ```
 
-The service calls the OpenAI-compatible `/v1/chat/completions` endpoint and injects the user's wedding profile into the system context.
+The service calls the OpenAI-compatible `/v1/chat/completions` endpoint and injects the user's wedding profile into the system context. `AI_NONYMAUZ_CLOUD_MODEL` is optional and defaults to `restu-ai`; set it to whatever model id your `ai-nonymauz-cloud` endpoint serves. Requests time out after 30 seconds so a slow endpoint never blocks the bot.
 
-`RESTU_AI_URL` and `RESTU_AI_API_KEY` remain supported as aliases.
+`RESTU_AI_URL`, `RESTU_AI_API_KEY` and `RESTU_AI_MODEL` remain supported as aliases.
 
 ## Vendor shortlist and comparison
 
