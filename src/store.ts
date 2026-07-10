@@ -264,6 +264,13 @@ export async function acceptInvite(telegramId:number,code:string) {
   const owner=inviteOwners.get(code);if(!owner)return false;collaboratorOwners.set(telegramId,owner);inviteOwners.delete(code);return true;
 }
 
+export async function allWeddings():Promise<{telegramId:number;weddingDate?:string;name?:string;partnerName?:string}[]> {
+  if(!db) return [...profiles.values()].filter(p=>p.remindersEnabled).map(p=>({telegramId:p.telegramId,weddingDate:p.weddingDate,name:p.name,partnerName:p.partnerName}));
+  const {data,error}=await db.from("weddings").select("owner_telegram_id,wedding_date,owner_name,partner_name,reminders_enabled");
+  if(error) throw dbError(error);
+  return (data??[]).filter((x:any)=>x.reminders_enabled!==false).map((x:any)=>({telegramId:Number(x.owner_telegram_id),weddingDate:x.wedding_date??undefined,name:x.owner_name??undefined,partnerName:x.partner_name??undefined}));
+}
+
 export async function dueReminders() {
   if(!db)return [] as {telegramId:number;task:Task}[];
   const today=new Date().toISOString().slice(0,10);

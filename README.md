@@ -93,6 +93,20 @@ https://YOUR-SERVICE.onrender.com/internal/reminders
 Authorization: Bearer YOUR_CRON_SECRET
 ```
 
+### Proactive nudges (countdown milestones + weekly digest)
+
+Also POST **daily** to `/internal/digest` with the same `Authorization: Bearer YOUR_CRON_SECRET` header. Each couple receives:
+
+- a **countdown milestone** message when they are 100, 60, 30, 14, 7, 3 or 1 day away, and
+- a **weekly digest** (task progress and what's still open) every Monday.
+
+```text
+https://YOUR-SERVICE.onrender.com/internal/digest
+Authorization: Bearer YOUR_CRON_SECRET
+```
+
+Couples with `reminders_enabled = false` are skipped. Schedule it once per day (e.g. via cron-job.org or Render Cron).
+
 ## Production notes
 
 - `/invite` creates a one-time partner/family invitation link.
