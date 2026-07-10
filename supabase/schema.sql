@@ -67,8 +67,6 @@ create table if not exists saved_vendors (
   created_at timestamptz default now(),
   primary key(wedding_id, vendor_id)
 );
-alter table saved_vendors add column if not exists compare_selected boolean default false;
-
 create table if not exists chat_messages (
   id uuid primary key default gen_random_uuid(),
   wedding_id uuid references weddings(id) on delete cascade not null,
@@ -76,6 +74,13 @@ create table if not exists chat_messages (
   content text not null,
   created_at timestamptz default now()
 );
+
+-- Idempotent migrations: bring databases created by an older schema up to date.
+-- Safe to run repeatedly; "add column if not exists" is a no-op when present.
+alter table weddings add column if not exists reminders_enabled boolean default true;
+alter table tasks add column if not exists assigned_telegram_id bigint;
+alter table tasks add column if not exists reminder_sent_at timestamptz;
+alter table saved_vendors add column if not exists compare_selected boolean default false;
 
 create index if not exists tasks_wedding_idx on tasks(wedding_id);
 create index if not exists chat_wedding_idx on chat_messages(wedding_id, created_at);
