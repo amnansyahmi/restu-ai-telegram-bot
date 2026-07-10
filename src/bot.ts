@@ -18,11 +18,12 @@ async function checklistText(userId:number) { const value=await progress(userId)
 function daysUntil(value?:string){ if(!value)return undefined; return Math.ceil((new Date(`${value}T00:00:00`).getTime()-Date.now())/86400000); }
 
 export async function askAI(userId:number,question:string){
-  const endpoint=process.env.RESTU_AI_URL?.trim(); if(!endpoint) return "Ask Restu AI is ready, but RESTU_AI_URL has not been configured yet.";
+  const endpoint=(process.env.AI_NONYMAUZ_CLOUD_URL||process.env.RESTU_AI_URL)?.trim(); if(!endpoint) return "Ask Restu AI is ready, but the AI service URL has not been configured yet.";
+  const apiKey=process.env.AI_NONYMAUZ_CLOUD_API_KEY||process.env.RESTU_AI_API_KEY;
   const profile=await getProfile(userId), history=await chatHistory(userId);
   const context=`User wedding: date=${profile.weddingDate??"unknown"}, location=${profile.location??"unknown"}, budget=RM${profile.budget}, guests=${profile.guestCount}, event=${profile.eventType}.`;
   const url=endpoint.endsWith("/v1/chat/completions")?endpoint:`${endpoint.replace(/\/$/,"")}/v1/chat/completions`;
-  const response=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json",...(process.env.RESTU_AI_API_KEY?{"Authorization":`Bearer ${process.env.RESTU_AI_API_KEY}`}:{})},body:JSON.stringify({model:"restu-ai",messages:[{role:"system",content:`You are Restu, a concise Malaysian wedding planning assistant. ${context}`},...history.slice(-8),{role:"user",content:question}],temperature:.4})});
+  const response=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json",...(apiKey?{"Authorization":`Bearer ${apiKey}`}:{})},body:JSON.stringify({model:"restu-ai",messages:[{role:"system",content:`You are Restu, a concise Malaysian wedding planning assistant. ${context}`},...history.slice(-8),{role:"user",content:question}],temperature:.4})});
   if(!response.ok) throw new Error(`Restu AI returned ${response.status}`); const data:any=await response.json(); return data.choices?.[0]?.message?.content??"I could not generate an answer.";
 }
 
