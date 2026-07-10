@@ -39,7 +39,10 @@ function dbError(error: any): Error {
   return e;
 }
 
-const url = process.env.SUPABASE_URL?.trim();
+// Normalise SUPABASE_URL to the bare project origin. Guards against a common
+// misconfiguration where a trailing slash or the "/rest/v1" path is included,
+// which makes PostgREST reject the request URL (PGRST125: invalid path).
+const url = process.env.SUPABASE_URL?.trim().replace(/\/rest\/v1\/?$/i, "").replace(/\/+$/, "");
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 const db: SupabaseClient | undefined = url && key ? createClient(url, key, { auth: { persistSession:false } }) : undefined;
 const profiles = new Map<number, Profile>();
