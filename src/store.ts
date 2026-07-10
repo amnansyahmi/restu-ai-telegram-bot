@@ -40,6 +40,7 @@ const memoryTasks = new Map<number, Task[]>();
 const messages = new Map<number, { role:"user"|"assistant"; content:string }[]>();
 const inviteOwners = new Map<string,number>();
 const collaboratorOwners = new Map<number,number>();
+const memorySaved = new Map<number,Map<string,boolean>>();
 
 function mapProfile(row: any): Profile {
   return { weddingId:row.id, telegramId:Number(row.owner_telegram_id), name:row.owner_name ?? undefined,
@@ -120,6 +121,30 @@ export async function vendors(category?:string):Promise<Vendor[]> {
   if(category) query=query.eq("category",category);
   const {data,error}=await query; if(error) throw error;
   return data.map((x:any)=>({id:x.id,name:x.name,category:x.category,location:x.location,priceFrom:Number(x.price_from),completionScore:x.completion_score,description:x.description}));
+}
+
+export async function vendorState(telegramId:number) {
+  const list=await vendors(),profile=await getProfile(telegramId);
+  if(!db){const state=memorySaved.get(telegramId)??new Map();return list.map(v=>({...v,saved:state.has(v.id),compareSelected:state.get(v.id)===true}));}
+  const {data,error}=await db.from("saved_vendors").select("vendor_id,compare_selected").eq("wedding_id",profile.weddingId);if(error)throw error;
+  const state=new Map((data??[]).map((x:any)=>[x.vendor_id,x.compare_selected]));return list.map(v=>({...v,saved:state.has(v.id),compareSelected:state.get(v.id)===true}));
+}
+
+export async function toggleSavedVendor(telegramId:number,vendorId:string) {
+  const profile=await getProfile(telegramId);
+  if(!db){const state=memorySaved.get(telegramId)??new Map();if(state.has(vendorId))state.delete(vendorId);else state.set(vendorId,false);memorySaved.set(telegramId,state);return state.has(vendorId);}
+  const current=await db.from("saved_vendors").select("vendor_id").eq("wedding_id",profile.weddingId).eq("vendor_id",vendorId).maybeSingle();
+  if(current.data){const {error}=await db.from("saved_vendors").delete().eq("wedding_id",profile.weddingId).eq("vendor_id",vendorId);if(error)throw error;return false;}
+  const {error}=await db.from("saved_vendors").insert({wedding_id:profile.weddingId,vendor_id:vendorId});if(error)throw error;return true;
+}
+
+export async function toggleCompareVendor(telegramId:number,vendorId:string) {
+  const profile=await getProfile(telegramId);
+  if(!db){const state=memorySaved.get(telegramId)??new Map();const next=state.get(vendorId)!==true;if(next&&[...state.values()].filter(Boolean).length>=3)throw new Error("You can compare up to 3 vendors.");state.set(vendorId,next);memorySaved.set(telegramId,state);return next;}
+  const selected=await db.from("saved_vendors").select("vendor_id").eq("wedding_id",profile.weddingId).eq("compare_selected",true);
+  const current=await db.from("saved_vendors").select("compare_selected").eq("wedding_id",profile.weddingId).eq("vendor_id",vendorId).maybeSingle();const next=current.data?.compare_selected!==true;
+  if(next&&(selected.data?.length??0)>=3)throw new Error("You can compare up to 3 vendors.");
+  const {error}=await db.from("saved_vendors").upsert({wedding_id:profile.weddingId,vendor_id:vendorId,compare_selected:next},{onConflict:"wedding_id,vendor_id"});if(error)throw error;return next;
 }
 
 export async function saveChat(telegramId:number, role:"user"|"assistant", content:string) {
