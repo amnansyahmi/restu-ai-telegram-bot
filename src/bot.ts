@@ -3,6 +3,16 @@ import { acceptInvite, chatHistory, createInvite, cycleTask, getProfile, progres
 
 const statusIcon:any = { not_started:"○",in_progress:"◐",completed:"●",need_review:"◎" };
 const CAPABILITIES = "• Checklist & progress tracking\n• Budget planner\n• Vendor discovery & comparison\n• Countdown to the big day\n• Ask Restu — instant answers, anytime";
+const errText = (e:any) => typeof e==="string" ? e : (e?.message || JSON.stringify(e).slice(0,200));
+// Parse an OpenAI-compatible completion body that may be JSON or a Server-Sent-Events stream.
+function parseCompletion(raw:string):{content?:string;error?:string}{
+  const trimmed=(raw||"").trim(); if(!trimmed) return {};
+  if(trimmed.startsWith("data:")){ let content="",error:string|undefined;
+    for(const line of trimmed.split("\n")){ const l=line.trim(); if(!l.startsWith("data:"))continue; const p=l.slice(5).trim(); if(p==="[DONE]")continue; let j:any; try{j=JSON.parse(p);}catch{continue;} if(j?.error)error=errText(j.error); content+=j?.choices?.[0]?.delta?.content||j?.choices?.[0]?.message?.content||""; }
+    return error?{error}:{content};
+  }
+  try{ const j:any=JSON.parse(trimmed); if(j?.error)return{error:errText(j.error)}; return {content:j?.choices?.[0]?.message?.content}; }catch{ return {error:`Non-JSON response: ${trimmed.slice(0,200)}`}; }
+}
 function mainKeyboard(publicUrl:string) { return new InlineKeyboard()
   .webApp("Open Restu.ai Dashboard",`${publicUrl}/app`).row()
   .text("Ask Restu","ask").text("Today’s Plan","checklist").row()
@@ -14,14 +24,10 @@ async function checklistText(userId:number) { const value=await progress(userId)
 function daysUntil(value?:string){ if(!value)return undefined; return Math.ceil((new Date(`${value}T00:00:00`).getTime()-Date.now())/86400000); }
 
 export async function askAI(userId:number,question:string){
-  const endpoint=(process.env.AI_NONYMAUZ_CLOUD_URL||process.env.RESTU_AI_URL)?.trim(); if(!endpoint) return "Ask Restu AI is ready, but the AI service URL has not been configured yet.";
-  const apiKey=process.env.AI_NONYMAUZ_CLOUD_API_KEY||process.env.RESTU_AI_API_KEY;
-  const model=(process.env.AI_NONYMAUZ_CLOUD_MODEL||process.env.RESTU_AI_MODEL)?.trim()||"restu-ai";
-  const profile=await getProfile(userId), history=await chatHistory(userId);
-  const context=`User wedding: date=${profile.weddingDate??"unknown"}, location=${profile.location??"unknown"}, budget=RM${profile.budget}, guests=${profile.guestCount}, event=${profile.eventType}.`;
-  const url=endpoint.endsWith("/v1/chat/completions")?endpoint:`${endpoint.replace(/\/$/,"")}/v1/chat/completions`;
-  const response=await fetch(url,{method:"POST",signal:AbortSignal.timeout(30000),headers:{"Content-Type":"application/json",...(apiKey?{"Authorization":`Bearer ${apiKey}`}:{})},body:JSON.stringify({model,messages:[{role:"system",content:`You are Restu, a concise Malaysian wedding planning assistant. ${context}`},...history.slice(-8),{role:"user",content:question}],temperature:.4})});
-  if(!response.ok){const detail=await response.text().catch(()=>""); throw new Error(`Restu AI returned ${response.status}${detail?`: ${detail.slice(0,200)}`:""}`);} const data:any=await response.json(); return data.choices?.[0]?.message?.content??"I could not generate an answer.";
+  // Reuse the SSE-aware streaming path so both bot chat and Mini App handle the
+  // same response shapes (JSON or event-stream) and surface upstream errors.
+  let full=""; for await(const token of askAIStream(userId,question)) full+=token;
+  return full.trim() || "I could not generate an answer.";
 }
 
 export async function checkAI(){
@@ -32,9 +38,11 @@ export async function checkAI(){
   const url=endpoint.endsWith("/v1/chat/completions")?endpoint:`${endpoint.replace(/\/$/,"")}/v1/chat/completions`;
   try{
     const response=await fetch(url,{method:"POST",signal:AbortSignal.timeout(15000),headers:{"Content-Type":"application/json",...(apiKey?{"Authorization":`Bearer ${apiKey}`}:{})},body:JSON.stringify({model,messages:[{role:"user",content:"ping"}],max_tokens:5})});
-    if(!response.ok){const detail=await response.text().catch(()=>""); return { configured:true, ok:false, model, url, error:`HTTP ${response.status}${detail?`: ${detail.slice(0,200)}`:""}` }; }
-    const data:any=await response.json().catch(()=>null); const content=data?.choices?.[0]?.message?.content;
-    return content ? { configured:true, ok:true, model, url } : { configured:true, ok:false, model, url, error:`200 OK but empty content: ${JSON.stringify(data)?.slice(0,200)}` };
+    const raw=await response.text().catch(()=>"");
+    if(!response.ok) return { configured:true, ok:false, model, url, error:`HTTP ${response.status}${raw?`: ${raw.slice(0,200)}`:""}` };
+    const parsed=parseCompletion(raw);
+    if(parsed.error) return { configured:true, ok:false, model, url, error:parsed.error };
+    return parsed.content ? { configured:true, ok:true, model, url } : { configured:true, ok:false, model, url, error:`200 OK but empty content: ${raw.slice(0,200)}` };
   }catch(error:any){ return { configured:true, ok:false, model, url, error:error?.message??"request failed" }; }
 }
 
@@ -48,13 +56,15 @@ export async function* askAIStream(userId:number,question:string):AsyncGenerator
   const response=await fetch(url,{method:"POST",signal:AbortSignal.timeout(60000),headers:{"Content-Type":"application/json",...(apiKey?{"Authorization":`Bearer ${apiKey}`}:{})},body:JSON.stringify({model,stream:true,messages:[{role:"system",content:`You are Restu, a concise Malaysian wedding planning assistant. ${context}`},...history.slice(-8),{role:"user",content:question}],temperature:.4})});
   if(!response.ok){const detail=await response.text().catch(()=>""); throw new Error(`Restu AI returned ${response.status}${detail?`: ${detail.slice(0,200)}`:""}`);}
   // Fall back to a single JSON payload if the service ignored stream:true.
-  if(!response.headers.get("content-type")?.includes("text/event-stream")){const data:any=await response.json().catch(()=>null); const content=data?.choices?.[0]?.message?.content; if(content){yield content;}else{console.error("Restu AI returned no content (non-stream):",JSON.stringify(data)?.slice(0,400));} return;}
+  if(!response.headers.get("content-type")?.includes("text/event-stream")){const raw=await response.text().catch(()=>""); const parsed=parseCompletion(raw); if(parsed.error) throw new Error(`Restu AI error: ${parsed.error}`); if(parsed.content){yield parsed.content;}else{console.error("Restu AI returned no content (non-stream):",raw.slice(0,400));} return;}
   const reader=response.body?.getReader(); if(!reader){ console.error("Restu AI stream returned no body"); return; }
   const decoder=new TextDecoder(); let buffer="";
   while(true){ const {done,value}=await reader.read(); if(done)break; buffer+=decoder.decode(value,{stream:true});
     let nl:number; while((nl=buffer.indexOf("\n"))>=0){ const line=buffer.slice(0,nl).trim(); buffer=buffer.slice(nl+1);
       if(!line.startsWith("data:"))continue; const payload=line.slice(5).trim(); if(payload==="[DONE]")return;
-      try{ const token=JSON.parse(payload)?.choices?.[0]?.delta?.content; if(token) yield token; }catch{ /* ignore keep-alive/partial frames */ } } }
+      let parsed:any; try{ parsed=JSON.parse(payload); }catch{ continue; }
+      if(parsed?.error) throw new Error(`Restu AI error: ${errText(parsed.error)}`);
+      const token=parsed?.choices?.[0]?.delta?.content; if(token) yield token; } }
 }
 
 export function createBot(token:string,publicUrl:string){
