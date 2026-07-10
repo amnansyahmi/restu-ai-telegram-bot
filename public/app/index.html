@@ -1,76 +1,28 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>Restu.ai Checklist</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    :root { color-scheme: light; --green:#275f53; --cream:#f8f4ec; --ink:#20312d; --muted:#6d7b76; }
-    * { box-sizing:border-box; }
-    body { margin:0; font-family:Inter,system-ui,sans-serif; background:var(--cream); color:var(--ink); }
-    main { max-width:600px; margin:auto; padding:24px 18px 40px; }
-    .eyebrow { color:var(--green); font-weight:700; font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
-    h1 { margin:8px 0 4px; font-family:Georgia,serif; font-size:34px; }
-    .sub { color:var(--muted); margin:0 0 22px; }
-    .card { background:#fff; border-radius:20px; padding:18px; box-shadow:0 8px 30px #183a3012; }
-    .progress-row { display:flex; justify-content:space-between; font-weight:700; }
-    .bar { height:10px; background:#e5ebe8; border-radius:10px; overflow:hidden; margin:12px 0 22px; }
-    .bar > div { height:100%; background:var(--green); width:0; transition:width .25s; }
-    .task { width:100%; display:flex; gap:12px; align-items:center; text-align:left; border:0; border-top:1px solid #edf0ee; background:#fff; padding:15px 2px; font-size:15px; color:var(--ink); }
-    .task:first-of-type { border-top:0; }
-    .check { width:25px; height:25px; flex:none; display:grid; place-items:center; border:2px solid #a7b6b1; border-radius:50%; }
-    .done .check { color:#fff; border-color:var(--green); background:var(--green); }
-    .done .title { text-decoration:line-through; color:var(--muted); }
-    .category { margin-left:auto; color:var(--muted); font-size:12px; }
-    #status { text-align:center; color:var(--muted); padding:28px; }
-  </style>
-</head>
-<body>
-  <main>
-    <div class="eyebrow">Restu.ai</div>
-    <h1>Wedding checklist</h1>
-    <p class="sub">One beautiful step at a time.</p>
-    <section class="card">
-      <div class="progress-row"><span>Your progress</span><span id="progressText">0%</span></div>
-      <div class="bar"><div id="progressBar"></div></div>
-      <div id="tasks"><div id="status">Loading your checklist…</div></div>
-    </section>
-  </main>
-  <script>
-    const tg = window.Telegram?.WebApp;
-    tg?.ready(); tg?.expand();
-    const queryUser = new URLSearchParams(location.search).get('userId');
-    const userId = tg?.initDataUnsafe?.user?.id || Number(queryUser) || 1;
-    let tasks = [];
-
-    function render() {
-      const complete = tasks.filter(t => t.completed).length;
-      const percent = tasks.length ? Math.round(complete / tasks.length * 100) : 0;
-      document.querySelector('#progressText').textContent = `${complete}/${tasks.length} · ${percent}%`;
-      document.querySelector('#progressBar').style.width = `${percent}%`;
-      document.querySelector('#tasks').innerHTML = tasks.map(t => `
-        <button class="task ${t.completed ? 'done' : ''}" data-id="${t.id}">
-          <span class="check">${t.completed ? '✓' : ''}</span>
-          <span class="title">${t.title}</span><span class="category">${t.category}</span>
-        </button>`).join('');
-      document.querySelectorAll('.task').forEach(button => button.onclick = () => toggle(button.dataset.id));
-    }
-
-    async function load() {
-      const response = await fetch(`/api/tasks?userId=${userId}`);
-      tasks = await response.json(); render();
-    }
-
-    async function toggle(taskId) {
-      tg?.HapticFeedback?.impactOccurred('light');
-      const response = await fetch(`/api/tasks/${taskId}/toggle`, {
-        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({userId})
-      });
-      const updated = await response.json();
-      tasks = tasks.map(t => t.id === updated.id ? updated : t); render();
-    }
-    load().catch(() => document.querySelector('#status').textContent = 'Unable to load checklist.');
-  </script>
-</body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>Restu.ai</title><script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--green:#0f5140;--gold:#c39a46;--cream:#f7f3e9;--white:#fff;--ink:#17332c;--muted:#74827d;--line:#e5e8e3}*{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font:14px Inter,system-ui,sans-serif}button,input{font:inherit}header{position:sticky;top:0;z-index:5;background:#f7f3e9ee;backdrop-filter:blur(12px);padding:16px 18px 10px;display:flex;align-items:center;justify-content:space-between}.brand{font:700 23px Georgia;color:var(--green)}.avatar{width:36px;height:36px;border-radius:50%;border:0;background:var(--green);color:white;font-weight:800}main{max-width:650px;margin:auto;padding:4px 16px 94px}.view{display:none}.view.on{display:block}.hero{position:relative;overflow:hidden;background:linear-gradient(135deg,#0f5140,#276d5a);color:white;border-radius:22px;padding:22px;margin:4px 0 15px}.hero:after{content:"";position:absolute;width:150px;height:150px;border:1px solid #ffffff2b;border-radius:50%;right:-45px;top:-60px}.hero h1{font:700 27px Georgia;margin:0 0 5px}.hero p{margin:0;color:#e6f0ec}.count{display:flex;gap:25px;margin-top:25px}.count b{display:block;font-size:24px}.count span{font-size:10px;letter-spacing:.12em}.card{background:white;border:1px solid #ebece7;border-radius:18px;padding:17px;margin:11px 0;box-shadow:0 8px 24px #17332c0a}.between{display:flex;justify-content:space-between;align-items:center}.bar{height:9px;background:#e8eeeb;border-radius:20px;overflow:hidden;margin-top:10px}.bar i{display:block;height:100%;background:var(--green)}h2{font:700 21px Georgia;margin:18px 2px 10px}h3{margin:0 0 7px}.muted{color:var(--muted)}.task{width:100%;display:flex;align-items:center;gap:12px;background:white;border:0;border-top:1px solid var(--line);padding:14px 2px;text-align:left}.task:first-child{border-top:0}.icon{font-size:20px}.tag{margin-left:auto;font-size:11px;color:var(--muted)}.chips{display:flex;gap:7px;overflow:auto;padding-bottom:5px}.chip{border:1px solid #ccd8d3;border-radius:99px;background:white;color:var(--green);padding:8px 12px;white-space:nowrap}.chip.on{background:var(--green);color:white}.vendor{display:grid;grid-template-columns:54px 1fr auto;gap:11px;align-items:center}.score{width:50px;height:50px;border:4px solid var(--gold);border-radius:50%;display:grid;place-items:center;font-weight:800;color:#8b692b}.price{color:var(--gold);font-weight:800}.budgetRow{display:grid;grid-template-columns:1fr auto;gap:8px;padding:13px 0;border-top:1px solid var(--line)}.budgetRow:first-child{border:0}.chat{height:52vh;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:6px 0}.bubble{max-width:86%;padding:12px 14px;border-radius:16px;line-height:1.45;white-space:pre-wrap}.bubble.user{align-self:flex-end;background:var(--green);color:white}.bubble.ai{align-self:flex-start;background:white;border:1px solid var(--line)}.composer{display:flex;gap:8px;position:sticky;bottom:76px;background:var(--cream);padding:8px 0}.composer input{flex:1;border:1px solid #ccd5d1;border-radius:14px;padding:12px;background:white}.primary{border:0;background:var(--green);color:white;border-radius:13px;padding:11px 15px;font-weight:700}.field{margin:12px 0}.field label{display:block;color:var(--muted);font-size:12px;margin-bottom:5px}.field input{width:100%;padding:11px;border:1px solid #d8dedb;border-radius:11px}.notice{background:#fff8e9;border:1px solid #ead5a7;padding:12px;border-radius:13px;color:#75591e}nav{position:fixed;z-index:10;bottom:0;left:0;right:0;height:72px;background:white;border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:7px 4px max(7px,env(safe-area-inset-bottom))}nav button{border:0;background:none;color:var(--muted);font-size:10px;min-width:52px}nav b{display:block;font-size:20px;margin-bottom:3px}nav button.on{color:var(--green)}#status{text-align:center;padding:35px;color:var(--muted)}
+</style></head><body><header><div><div class="brand">Restu</div><small id="greeting" class="muted">Your wedding companion</small></div><button class="avatar" onclick="show('profile')" id="avatar">R</button></header><main>
+<div id="status">Preparing your wedding plan…</div>
+<section class="view" id="home"><div class="hero"><h1 id="couple">Your Wedding</h1><p id="meta">Complete your profile</p><div class="count"><div><b id="days">—</b><span>DAYS</span></div><div><b id="guests">0</b><span>GUESTS</span></div><div><b id="budget">RM0</b><span>BUDGET</span></div></div></div><div class="card"><div class="between"><h3>Wedding Readiness</h3><b id="ready">0%</b></div><div class="bar"><i id="readyBar"></i></div><p class="muted" id="nextTask">Your next action will appear here.</p></div><h2>Categories</h2><div id="categories"></div></section>
+<section class="view" id="plan"><h2>Your plan</h2><p class="muted">Tap a task to move through its status.</p><div class="card" id="taskList"></div></section>
+<section class="view" id="ask"><h2>Ask Restu AI</h2><div class="notice" id="aiNotice">Answers use your wedding date, location, budget and guest count.</div><div class="chat" id="chat"><div class="bubble ai">Hi! Ask me anything about planning your Malaysian wedding.</div></div><form class="composer" id="chatForm"><input id="message" maxlength="2000" placeholder="Ask about budget, vendors…"><button class="primary">Send</button></form></section>
+<section class="view" id="vendors"><h2>Vendor discovery</h2><div class="chips" id="vendorChips"></div><div id="vendorList"></div></section>
+<section class="view" id="budgetView"><h2>Budget planner</h2><div class="card"><div class="between"><span>Estimated total</span><b id="budgetTotal">RM0</b></div><div class="bar"><i style="width:10%;background:var(--gold)"></i></div><p class="muted">Suggested allocations based on your total budget.</p></div><div class="card" id="budgetRows"></div></section>
+<section class="view" id="profile"><h2>Wedding profile</h2><form class="card" id="profileForm"><div class="field"><label>Partner name</label><input name="partnerName"></div><div class="field"><label>Wedding date</label><input name="weddingDate" type="date"></div><div class="field"><label>Location</label><input name="location"></div><div class="field"><label>Total budget (RM)</label><input name="budget" type="number"></div><div class="field"><label>Guest count</label><input name="guestCount" type="number"></div><button class="primary">Save profile</button></form><div class="notice">Collaboration invitations, scheduled reminders and document uploads require Supabase configuration.</div></section>
+</main><nav><button data-view="home" class="on"><b>⌂</b>Home</button><button data-view="plan"><b>☑</b>Plan</button><button data-view="ask"><b>✦</b>Ask</button><button data-view="vendors"><b>⌕</b>Vendors</button><button data-view="budgetView"><b>RM</b>Budget</button></nav>
+<script>
+const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();let data;const headers={'Content-Type':'application/json','x-telegram-init-data':tg?.initData||''};const dev=new URLSearchParams(location.search).get('userId');
+async function api(path,options={}){const join=path.includes('?')?'&':'?';const response=await fetch(path+(dev?`${join}userId=${dev}`:''),{...options,headers:{...headers,...options.headers}});const body=await response.json();if(!response.ok)throw new Error(body.error||'Request failed');return body}
+function esc(v=''){return String(v).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]))}function money(v){return new Intl.NumberFormat('en-MY',{style:'currency',currency:'MYR',maximumFractionDigits:0}).format(v||0)}
+function show(id){document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on',x.id===id));document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x.dataset.view===id));}
+document.querySelectorAll('nav button').forEach(x=>x.onclick=()=>show(x.dataset.view));
+function render(){const p=data.profile,ts=data.tasks,days=p.weddingDate?Math.max(0,Math.ceil((new Date(p.weddingDate+'T00:00:00')-Date.now())/86400000)):'—';document.querySelector('#couple').textContent=p.partnerName?`${p.name||'You'} & ${p.partnerName}`:'Your Wedding';document.querySelector('#meta').textContent=[p.weddingDate,p.location,p.eventType].filter(Boolean).join(' · ')||'Complete your profile';document.querySelector('#days').textContent=days;document.querySelector('#guests').textContent=p.guestCount;document.querySelector('#budget').textContent=money(p.budget).replace('MYR','RM');document.querySelector('#ready').textContent=data.progress.percent+'%';document.querySelector('#readyBar').style.width=data.progress.percent+'%';document.querySelector('#nextTask').textContent=(ts.find(x=>x.status!=='completed')||{}).title||'Everything is complete 🎉';document.querySelector('#avatar').textContent=(p.name||'R')[0].toUpperCase();
+ const groups={};ts.forEach(t=>(groups[t.category]??=[]).push(t));document.querySelector('#categories').innerHTML=Object.entries(groups).map(([k,v])=>{const done=v.filter(x=>x.status==='completed').length,pc=Math.round(done/v.length*100);return `<div class="card"><div class="between"><b>${esc(k)}</b><b>${pc}%</b></div><div class="bar"><i style="width:${pc}%"></i></div></div>`}).join('');renderTasks();renderVendors();renderBudget();fillProfile();}
+function renderTasks(){const icons={not_started:'⬜',in_progress:'🟨',completed:'✅',need_review:'🔎'};document.querySelector('#taskList').innerHTML=data.tasks.map(t=>`<button class="task" data-task="${t.id}"><span class="icon">${icons[t.status]}</span><span>${esc(t.title)}</span><span class="tag">${esc(t.category)}</span></button>`).join('');document.querySelectorAll('[data-task]').forEach(b=>b.onclick=async()=>{tg?.HapticFeedback?.impactOccurred('light');const updated=await api(`/api/tasks/${b.dataset.task}/cycle`,{method:'POST',body:'{}'});data.tasks=data.tasks.map(x=>x.id===updated.id?updated:x);data.progress={completed:data.tasks.filter(x=>x.status==='completed').length,total:data.tasks.length,percent:Math.round(data.tasks.filter(x=>x.status==='completed').length/data.tasks.length*100)};render()})}
+let vendorCategory='All';function renderVendors(){const cats=['All',...new Set(data.vendors.map(x=>x.category))];document.querySelector('#vendorChips').innerHTML=cats.map(x=>`<button class="chip ${x===vendorCategory?'on':''}" data-cat="${esc(x)}">${esc(x)}</button>`).join('');document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{vendorCategory=b.dataset.cat;renderVendors()});const list=vendorCategory==='All'?data.vendors:data.vendors.filter(x=>x.category===vendorCategory);document.querySelector('#vendorList').innerHTML=list.map(v=>`<div class="card vendor"><div class="score">${v.completionScore}</div><div><b>${esc(v.name)}</b><div class="muted">${esc(v.category)} · ${esc(v.location)}</div></div><div class="price">${money(v.priceFrom)}</div></div>`).join('')||'<p class="muted">No vendors yet.</p>'}
+function renderBudget(){const total=data.profile.budget||0,alloc=[['Food & Catering',.37],['Venue & Rental',.15],['Decoration',.10],['Photo & Video',.08],['Attire & Makeup',.11],['Gifts & PA',.09],['Emergency Buffer',.10]];document.querySelector('#budgetTotal').textContent=money(total);document.querySelector('#budgetRows').innerHTML=alloc.map(([n,p])=>`<div class="budgetRow"><b>${n}</b><span>${money(total*p)}</span></div>`).join('')}
+function fillProfile(){const f=document.querySelector('#profileForm'),p=data.profile;['partnerName','weddingDate','location','budget','guestCount'].forEach(k=>f.elements[k].value=p[k]??'')}
+document.querySelector('#profileForm').onsubmit=async e=>{e.preventDefault();const raw=Object.fromEntries(new FormData(e.target));raw.budget=Number(raw.budget);raw.guestCount=Number(raw.guestCount);data.profile=await api('/api/profile',{method:'PATCH',body:JSON.stringify(raw)});render();tg?.showAlert?.('Profile saved')};
+document.querySelector('#chatForm').onsubmit=async e=>{e.preventDefault();const input=document.querySelector('#message'),text=input.value.trim();if(!text)return;const chat=document.querySelector('#chat');chat.insertAdjacentHTML('beforeend',`<div class="bubble user">${esc(text)}</div>`);input.value='';const wait=document.createElement('div');wait.className='bubble ai';wait.textContent='Restu is thinking…';chat.append(wait);chat.scrollTop=chat.scrollHeight;try{const r=await api('/api/chat',{method:'POST',body:JSON.stringify({message:text})});wait.textContent=r.answer}catch(err){wait.textContent=err.message}chat.scrollTop=chat.scrollHeight};
+api('/api/dashboard').then(x=>{data=x;document.querySelector('#status').remove();render();show(location.hash==='#vendors'?'vendors':'home')}).catch(err=>document.querySelector('#status').textContent=err.message);
+</script></body></html>
