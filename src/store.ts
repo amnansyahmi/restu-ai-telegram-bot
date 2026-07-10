@@ -32,6 +32,13 @@ const seedVendors: Vendor[] = [
   { id:"v4", name:"Cerita Kita Studio", category:"Fotografi", location:"Selangor", priceFrom:3500, completionScore:82 }
 ];
 
+function dbError(error: any): Error {
+  const detail = error?.message || error?.details || error?.hint || error?.code || "unknown database error";
+  const e = new Error(`Supabase: ${detail}${error?.code ? ` (${error.code})` : ""}`);
+  (e as any).cause = error;
+  return e;
+}
+
 const url = process.env.SUPABASE_URL?.trim();
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 const db: SupabaseClient | undefined = url && key ? createClient(url, key, { auth: { persistSession:false } }) : undefined;
@@ -67,7 +74,7 @@ export async function getProfile(telegramId: number, name?: string): Promise<Pro
     }
     if (!data) {
       const created = await db.from("weddings").insert({ owner_telegram_id:telegramId, owner_name:name }).select("*").single();
-      if (created.error) throw created.error;
+      if (created.error) throw dbError(created.error);
       data = created.data;
       await seedTasks(data.id);
     }
@@ -87,7 +94,7 @@ export async function updateProfile(telegramId: number, patch: Partial<Profile>)
     for (const [key,value] of Object.entries(patch)) if (mapping[key]) fields[mapping[key]] = value;
     fields.updated_at = new Date().toISOString();
     const { data,error } = await db.from("weddings").update(fields).eq("id",profile.weddingId).select("*").single();
-    if (error) throw error;
+    if (error) throw dbError(error);
     return mapProfile(data);
   }
   profiles.set(telegramId,updated); return updated;
@@ -98,7 +105,7 @@ export async function tasksFor(telegramId: number): Promise<Task[]> {
   if (db) {
     await seedTasks(profile.weddingId);
     const { data,error } = await db.from("tasks").select("*").eq("wedding_id",profile.weddingId).order("created_at");
-    if (error) throw error;
+    if (error) throw dbError(error);
     return data.map((x:any) => ({ id:x.id,title:x.title,category:x.category,status:x.status,dueDate:x.due_date ?? undefined }));
   }
   if (!memoryTasks.has(telegramId)) memoryTasks.set(telegramId,starterTasks.map(([title,category]) => ({ id:randomUUID(),title,category,status:"not_started" })));
@@ -109,7 +116,7 @@ export async function cycleTask(telegramId:number, taskId:string): Promise<Task|
   const task = (await tasksFor(telegramId)).find(x => x.id === taskId); if (!task) return;
   const order:TaskStatus[] = ["not_started","in_progress","completed","need_review"];
   task.status = order[(order.indexOf(task.status)+1)%order.length];
-  if (db) { const { error } = await db.from("tasks").update({status:task.status}).eq("id",taskId); if(error) throw error; }
+  if (db) { const { error } = await db.from("tasks").update({status:task.status}).eq("id",taskId); if(error) throw dbError(error); }
   return task;
 }
 
@@ -119,14 +126,14 @@ export async function vendors(category?:string):Promise<Vendor[]> {
   if (!db) return category ? seedVendors.filter(x=>x.category===category) : seedVendors;
   let query=db.from("vendors").select("*").eq("active",true).order("completion_score",{ascending:false});
   if(category) query=query.eq("category",category);
-  const {data,error}=await query; if(error) throw error;
+  const {data,error}=await query; if(error) throw dbError(error);
   return data.map((x:any)=>({id:x.id,name:x.name,category:x.category,location:x.location,priceFrom:Number(x.price_from),completionScore:x.completion_score,description:x.description}));
 }
 
 export async function vendorState(telegramId:number) {
   const list=await vendors(),profile=await getProfile(telegramId);
   if(!db){const state=memorySaved.get(telegramId)??new Map();return list.map(v=>({...v,saved:state.has(v.id),compareSelected:state.get(v.id)===true}));}
-  const {data,error}=await db.from("saved_vendors").select("vendor_id,compare_selected").eq("wedding_id",profile.weddingId);if(error)throw error;
+  const {data,error}=await db.from("saved_vendors").select("vendor_id,compare_selected").eq("wedding_id",profile.weddingId);if(error)throw dbError(error);
   const state=new Map((data??[]).map((x:any)=>[x.vendor_id,x.compare_selected]));return list.map(v=>({...v,saved:state.has(v.id),compareSelected:state.get(v.id)===true}));
 }
 
@@ -134,8 +141,8 @@ export async function toggleSavedVendor(telegramId:number,vendorId:string) {
   const profile=await getProfile(telegramId);
   if(!db){const state=memorySaved.get(telegramId)??new Map();if(state.has(vendorId))state.delete(vendorId);else state.set(vendorId,false);memorySaved.set(telegramId,state);return state.has(vendorId);}
   const current=await db.from("saved_vendors").select("vendor_id").eq("wedding_id",profile.weddingId).eq("vendor_id",vendorId).maybeSingle();
-  if(current.data){const {error}=await db.from("saved_vendors").delete().eq("wedding_id",profile.weddingId).eq("vendor_id",vendorId);if(error)throw error;return false;}
-  const {error}=await db.from("saved_vendors").insert({wedding_id:profile.weddingId,vendor_id:vendorId});if(error)throw error;return true;
+  if(current.data){const {error}=await db.from("saved_vendors").delete().eq("wedding_id",profile.weddingId).eq("vendor_id",vendorId);if(error)throw dbError(error);return false;}
+  const {error}=await db.from("saved_vendors").insert({wedding_id:profile.weddingId,vendor_id:vendorId});if(error)throw dbError(error);return true;
 }
 
 export async function toggleCompareVendor(telegramId:number,vendorId:string) {
@@ -144,12 +151,12 @@ export async function toggleCompareVendor(telegramId:number,vendorId:string) {
   const selected=await db.from("saved_vendors").select("vendor_id").eq("wedding_id",profile.weddingId).eq("compare_selected",true);
   const current=await db.from("saved_vendors").select("compare_selected").eq("wedding_id",profile.weddingId).eq("vendor_id",vendorId).maybeSingle();const next=current.data?.compare_selected!==true;
   if(next&&(selected.data?.length??0)>=3)throw new Error("You can compare up to 3 vendors.");
-  const {error}=await db.from("saved_vendors").upsert({wedding_id:profile.weddingId,vendor_id:vendorId,compare_selected:next},{onConflict:"wedding_id,vendor_id"});if(error)throw error;return next;
+  const {error}=await db.from("saved_vendors").upsert({wedding_id:profile.weddingId,vendor_id:vendorId,compare_selected:next},{onConflict:"wedding_id,vendor_id"});if(error)throw dbError(error);return next;
 }
 
 export async function saveChat(telegramId:number, role:"user"|"assistant", content:string) {
   const profile=await getProfile(telegramId);
-  if(db) { const {error}=await db.from("chat_messages").insert({wedding_id:profile.weddingId,role,content}); if(error) throw error; return; }
+  if(db) { const {error}=await db.from("chat_messages").insert({wedding_id:profile.weddingId,role,content}); if(error) throw dbError(error); return; }
   const history=messages.get(telegramId)??[]; history.push({role,content}); messages.set(telegramId,history.slice(-20));
 }
 
@@ -157,17 +164,17 @@ export async function chatHistory(telegramId:number) {
   const profile=await getProfile(telegramId);
   if(!db) return messages.get(telegramId)??[];
   const {data,error}=await db.from("chat_messages").select("role,content").eq("wedding_id",profile.weddingId).order("created_at",{ascending:true}).limit(20);
-  if(error) throw error; return data as {role:"user"|"assistant";content:string}[];
+  if(error) throw dbError(error); return data as {role:"user"|"assistant";content:string}[];
 }
 
 export async function createInvite(telegramId:number) {
   const profile=await getProfile(telegramId),code=randomUUID().replaceAll("-","").slice(0,12);
-  if(db){const {error}=await db.from("collaborators").insert({wedding_id:profile.weddingId,invite_code:code});if(error)throw error;}else inviteOwners.set(code,telegramId);
+  if(db){const {error}=await db.from("collaborators").insert({wedding_id:profile.weddingId,invite_code:code});if(error)throw dbError(error);}else inviteOwners.set(code,telegramId);
   return code;
 }
 
 export async function acceptInvite(telegramId:number,code:string) {
-  if(db){const {data,error}=await db.from("collaborators").update({telegram_id:telegramId,accepted_at:new Date().toISOString()}).eq("invite_code",code).is("telegram_id",null).select("wedding_id").maybeSingle();if(error)throw error;return Boolean(data);}
+  if(db){const {data,error}=await db.from("collaborators").update({telegram_id:telegramId,accepted_at:new Date().toISOString()}).eq("invite_code",code).is("telegram_id",null).select("wedding_id").maybeSingle();if(error)throw dbError(error);return Boolean(data);}
   const owner=inviteOwners.get(code);if(!owner)return false;collaboratorOwners.set(telegramId,owner);inviteOwners.delete(code);return true;
 }
 
@@ -175,8 +182,8 @@ export async function dueReminders() {
   if(!db)return [] as {telegramId:number;task:Task}[];
   const today=new Date().toISOString().slice(0,10);
   const {data,error}=await db.from("tasks").select("*,weddings!inner(owner_telegram_id,reminders_enabled)").lte("due_date",today).neq("status","completed").is("reminder_sent_at",null);
-  if(error)throw error;
+  if(error)throw dbError(error);
   return (data??[]).filter((x:any)=>x.weddings.reminders_enabled).map((x:any)=>({telegramId:Number(x.assigned_telegram_id??x.weddings.owner_telegram_id),task:{id:x.id,title:x.title,category:x.category,status:x.status,dueDate:x.due_date}}));
 }
 
-export async function markReminderSent(taskId:string){if(db){const {error}=await db.from("tasks").update({reminder_sent_at:new Date().toISOString()}).eq("id",taskId);if(error)throw error;}}
+export async function markReminderSent(taskId:string){if(db){const {error}=await db.from("tasks").update({reminder_sent_at:new Date().toISOString()}).eq("id",taskId);if(error)throw dbError(error);}}
