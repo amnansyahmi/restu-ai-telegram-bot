@@ -18,6 +18,7 @@ export type Profile = {
   remindersEnabled: boolean;
 };
 export type Vendor = { id: string; name: string; category: string; location: string; priceFrom: number; completionScore: number; description?: string };
+export type Guest = { id: string; name: string; rsvp: "pending" | "yes" | "no"; pax: number };
 
 const starterTasks = [
   ["Tetapkan bajet perkahwinan", "Planning"], ["Sahkan tarikh perkahwinan", "Planning"],
@@ -48,6 +49,7 @@ const db: SupabaseClient | undefined = url && key ? createClient(url, key, { aut
 const profiles = new Map<number, Profile>();
 const memoryTasks = new Map<number, Task[]>();
 const memoryBudget = new Map<number, { category:string; allocated:number; spent:number }[]>();
+const memoryGuests = new Map<number, Guest[]>();
 const DEFAULT_ALLOC:[string,number][] = [["Food & Catering",.37],["Venue & Rental",.15],["Pelamin & Decoration",.10],["Photo & Video",.08],["Attire & Makeup",.11],["Gifts & PA System",.09],["Emergency Buffer",.10]];
 const messages = new Map<number, { role:"user"|"assistant"; content:string }[]>();
 const inviteOwners = new Map<string,number>();
@@ -173,6 +175,32 @@ export async function setBudgetItem(telegramId:number, category:string, patch:{a
   const fields:any={wedding_id:profile.weddingId,category}; if(patch.allocated!=null)fields.allocated=patch.allocated; if(patch.spent!=null)fields.spent=patch.spent;
   const {data,error}=await db.from("budget_items").upsert(fields,{onConflict:"wedding_id,category"}).select("category,allocated,spent").single(); if(error) throw dbError(error);
   return {category:data.category,allocated:Number(data.allocated),spent:Number(data.spent)};
+}
+
+export async function guests(telegramId:number):Promise<Guest[]> {
+  if(!db) return memoryGuests.get(telegramId)??[];
+  const profile=await getProfile(telegramId);
+  const {data,error}=await db.from("guests").select("id,name,rsvp,pax").eq("wedding_id",profile.weddingId).order("created_at");
+  if(error) throw dbError(error);
+  return data.map((x:any)=>({id:x.id,name:x.name,rsvp:x.rsvp,pax:Number(x.pax)||1}));
+}
+export async function addGuest(telegramId:number, name:string, pax=1):Promise<Guest> {
+  const clean=name.trim().slice(0,80)||"Guest", p=Math.max(1,Math.min(50,Math.round(pax)||1));
+  if(!db){ const list=memoryGuests.get(telegramId)??[]; const g:Guest={id:randomUUID(),name:clean,rsvp:"pending",pax:p}; list.push(g); memoryGuests.set(telegramId,list); return g; }
+  const profile=await getProfile(telegramId);
+  const {data,error}=await db.from("guests").insert({wedding_id:profile.weddingId,name:clean,pax:p}).select("id,name,rsvp,pax").single();
+  if(error) throw dbError(error); return {id:data.id,name:data.name,rsvp:data.rsvp,pax:Number(data.pax)||1};
+}
+export async function setGuestRsvp(telegramId:number, guestId:string, rsvp:Guest["rsvp"]):Promise<Guest|undefined> {
+  if(!db){ const g=(memoryGuests.get(telegramId)??[]).find(x=>x.id===guestId); if(!g)return; g.rsvp=rsvp; return g; }
+  const profile=await getProfile(telegramId);
+  const {data,error}=await db.from("guests").update({rsvp}).eq("wedding_id",profile.weddingId).eq("id",guestId).select("id,name,rsvp,pax").maybeSingle();
+  if(error) throw dbError(error); return data?{id:data.id,name:data.name,rsvp:data.rsvp,pax:Number(data.pax)||1}:undefined;
+}
+export async function removeGuest(telegramId:number, guestId:string):Promise<void> {
+  if(!db){ memoryGuests.set(telegramId,(memoryGuests.get(telegramId)??[]).filter(x=>x.id!==guestId)); return; }
+  const profile=await getProfile(telegramId);
+  const {error}=await db.from("guests").delete().eq("wedding_id",profile.weddingId).eq("id",guestId); if(error) throw dbError(error);
 }
 
 export async function vendors(category?:string):Promise<Vendor[]> {
