@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Restu.ai Checklist</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root { color-scheme: light; --green:#275f53; --cream:#f8f4ec; --ink:#20312d; --muted:#6d7b76; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter,system-ui,sans-serif; background:var(--cream); color:var(--ink); }
+    main { max-width:600px; margin:auto; padding:24px 18px 40px; }
+    .eyebrow { color:var(--green); font-weight:700; font-size:13px; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { margin:8px 0 4px; font-family:Georgia,serif; font-size:34px; }
+    .sub { color:var(--muted); margin:0 0 22px; }
+    .card { background:#fff; border-radius:20px; padding:18px; box-shadow:0 8px 30px #183a3012; }
+    .progress-row { display:flex; justify-content:space-between; font-weight:700; }
+    .bar { height:10px; background:#e5ebe8; border-radius:10px; overflow:hidden; margin:12px 0 22px; }
+    .bar > div { height:100%; background:var(--green); width:0; transition:width .25s; }
+    .task { width:100%; display:flex; gap:12px; align-items:center; text-align:left; border:0; border-top:1px solid #edf0ee; background:#fff; padding:15px 2px; font-size:15px; color:var(--ink); }
+    .task:first-of-type { border-top:0; }
+    .check { width:25px; height:25px; flex:none; display:grid; place-items:center; border:2px solid #a7b6b1; border-radius:50%; }
+    .done .check { color:#fff; border-color:var(--green); background:var(--green); }
+    .done .title { text-decoration:line-through; color:var(--muted); }
+    .category { margin-left:auto; color:var(--muted); font-size:12px; }
+    #status { text-align:center; color:var(--muted); padding:28px; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Restu.ai</div>
+    <h1>Wedding checklist</h1>
+    <p class="sub">One beautiful step at a time.</p>
+    <section class="card">
+      <div class="progress-row"><span>Your progress</span><span id="progressText">0%</span></div>
+      <div class="bar"><div id="progressBar"></div></div>
+      <div id="tasks"><div id="status">Loading your checklist…</div></div>
+    </section>
+  </main>
+  <script>
+    const tg = window.Telegram?.WebApp;
+    tg?.ready(); tg?.expand();
+    const queryUser = new URLSearchParams(location.search).get('userId');
+    const userId = tg?.initDataUnsafe?.user?.id || Number(queryUser) || 1;
+    let tasks = [];
+
+    function render() {
+      const complete = tasks.filter(t => t.completed).length;
+      const percent = tasks.length ? Math.round(complete / tasks.length * 100) : 0;
+      document.querySelector('#progressText').textContent = `${complete}/${tasks.length} · ${percent}%`;
+      document.querySelector('#progressBar').style.width = `${percent}%`;
+      document.querySelector('#tasks').innerHTML = tasks.map(t => `
+        <button class="task ${t.completed ? 'done' : ''}" data-id="${t.id}">
+          <span class="check">${t.completed ? '✓' : ''}</span>
+          <span class="title">${t.title}</span><span class="category">${t.category}</span>
+        </button>`).join('');
+      document.querySelectorAll('.task').forEach(button => button.onclick = () => toggle(button.dataset.id));
+    }
+
+    async function load() {
+      const response = await fetch(`/api/tasks?userId=${userId}`);
+      tasks = await response.json(); render();
+    }
+
+    async function toggle(taskId) {
+      tg?.HapticFeedback?.impactOccurred('light');
+      const response = await fetch(`/api/tasks/${taskId}/toggle`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({userId})
+      });
+      const updated = await response.json();
+      tasks = tasks.map(t => t.id === updated.id ? updated : t); render();
+    }
+    load().catch(() => document.querySelector('#status').textContent = 'Unable to load checklist.');
+  </script>
+</body>
+</html>
