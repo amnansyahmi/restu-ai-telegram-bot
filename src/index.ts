@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import { webhookCallback } from "grammy";
 import { askAI, askAIStream, checkAI, createBot } from "./bot.js";
-import { addTask, checkStorage, cycleTask, dueReminders, getProfile, markReminderSent, progress, saveChat, setTaskDone, storageMode, tasksFor, toggleCompareVendor, toggleSavedVendor, updateProfile, vendorState, vendors } from "./store.js";
+import { addTask, budgetItems, checkStorage, cycleTask, dueReminders, getProfile, markReminderSent, progress, saveChat, setBudgetItem, setTaskDone, storageMode, tasksFor, toggleCompareVendor, toggleSavedVendor, updateProfile, vendorState, vendors } from "./store.js";
 import { telegramUser } from "./telegram-auth.js";
 
 const token=process.env.TELEGRAM_BOT_TOKEN;
@@ -14,11 +14,13 @@ app.use(express.json({limit:"100kb"})); app.use(express.static("public"));
 app.get("/health",async(req,res)=>{const db=await checkStorage();const body:any={ok:true,storage:storageMode(),db};if(req.query.ai)body.ai=await checkAI();res.json(body);});
 
 function api(handler:(req:any,res:any,userId:number)=>Promise<any>){return async(req:any,res:any)=>{try{const userId=telegramUser(req,botToken);await handler(req,res,userId);}catch(error:any){res.status(error?.message?.includes("Telegram")?401:500).json({error:error?.message??"Unexpected error"});}};}
-app.get("/api/dashboard",api(async(_req,res,userId)=>{const [profile,tasks,value,vendorList]=await Promise.all([getProfile(userId),tasksFor(userId),progress(userId),vendorState(userId)]);res.json({profile,tasks,progress:value,vendors:vendorList});}));
+app.get("/api/dashboard",api(async(_req,res,userId)=>{const [profile,tasks,value,vendorList,budget]=await Promise.all([getProfile(userId),tasksFor(userId),progress(userId),vendorState(userId),budgetItems(userId)]);res.json({profile,tasks,progress:value,vendors:vendorList,budget});}));
 app.get("/api/tasks",api(async(_req,res,userId)=>res.json(await tasksFor(userId))));
 app.post("/api/tasks/:taskId/cycle",api(async(req,res,userId)=>{const task=await cycleTask(userId,req.params.taskId);if(!task)return res.status(404).json({error:"Task not found"});res.json(task);}));
 app.post("/api/tasks/:taskId/toggle",api(async(req,res,userId)=>{const task=await setTaskDone(userId,req.params.taskId,Boolean(req.body?.done));if(!task)return res.status(404).json({error:"Task not found"});res.json(task);}));
 app.post("/api/tasks",api(async(req,res,userId)=>{const title=String(req.body?.title??"").trim();if(!title)return res.status(400).json({error:"Title required"});res.json(await addTask(userId,title,String(req.body?.category??"Planning"))); }));
+app.get("/api/budget",api(async(_req,res,userId)=>res.json(await budgetItems(userId))));
+app.patch("/api/budget/:category",api(async(req,res,userId)=>{const patch:any={};if(req.body?.allocated!=null)patch.allocated=Math.max(0,Number(req.body.allocated)||0);if(req.body?.spent!=null)patch.spent=Math.max(0,Number(req.body.spent)||0);res.json(await setBudgetItem(userId,req.params.category,patch));}));
 app.patch("/api/profile",api(async(req,res,userId)=>{const allowed=["partnerName","weddingDate","location","budget","guestCount","eventType","remindersEnabled"];const patch=Object.fromEntries(Object.entries(req.body??{}).filter(([key])=>allowed.includes(key)));res.json(await updateProfile(userId,patch));}));
 app.get("/api/vendors",api(async(req,res)=>res.json(await vendors(typeof req.query.category==="string"?req.query.category:undefined))));
 app.post("/api/vendors/:vendorId/save",api(async(req,res,userId)=>res.json({saved:await toggleSavedVendor(userId,req.params.vendorId)})));
